@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "CSR Support System",
+  "version": "1.0.0",
+  "description": "Chrome extension companion for the CSR Support System dashboard.",
+  "permissions": ["activeTab", "scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ],
+  "action": {
+    "default_title": "CSR Support System"
+  }
+}
