@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CSR Live Caption Test</title>
+    <style>
+        body { font-family: sans-serif; padding: 40px; background: #f4f4f5; }
+        .caption-box { background: black; color: white; padding: 20px; margin-top: 20px; font-size: 18px; border-radius: 8px; min-height: 50px; }
+        button { padding: 10px 15px; margin-right: 10px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h2>Live Caption Simulator</h2>
+    <p>Click a button to simulate a customer service agent speaking.</p>
+    
+    <button onclick="speak('I understand your frustration.')">Safe Phrase</button>
+    <button onclick="speak('I promise we will get you a full refund.')">Violation Risk!</button>
+
+    <!-- This is the exact class our content.js is looking for -->
+    <div id="captions" class="caption-box live-caption-text"></div>
+
+    <script>
+        function speak(text) {
+            document.getElementById('captions').innerText = text;
+        }
+    </script>
+</body>
+</html>

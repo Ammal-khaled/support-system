@@ -1,78 +1,84 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginUser } from "../services/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../firebase";
+import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
+  const { currentUser, loading, userProfile } = useAuth();
+
+  useEffect(() => {
+    if (!loading && currentUser) {
+      const role = userProfile?.role;
+      navigate(role === "team_lead" ? "/team-lead" : "/agent", { replace: true });
+    }
+  }, [currentUser, loading, userProfile, navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
-    
-    const { user, error } = await loginUser(email, password);
-    
-    if (error) {
+    setSubmitting(true);
+
+    const { user, error: loginError } = await loginUser(email, password);
+
+    if (loginError || !user) {
       setError("Failed to log in. Please check your credentials.");
-    } else {
-      // For now, we route everyone to the agent dashboard. 
-      // We will add role-based routing later.
-      navigate("/agent");
+      setSubmitting(false);
+      return;
     }
+
+    const userDoc = await getDoc(doc(db, "users", user.uid));
+    const role = userDoc.exists() ? userDoc.data().role : "agent";
+    navigate(role === "team_lead" ? "/team-lead" : "/agent");
+    setSubmitting(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">
-          CSR Support System
-        </h2>
-        
+    <div className="page-bg flex items-center justify-center p-4">
+      <div className="card w-full max-w-md p-8">
+        <div className="text-center mb-8">
+          <h1 className="font-display text-2xl font-semibold text-text-main">Aamer CSR Portal</h1>
+          <p className="text-text-muted mt-2 text-sm">Sign in to access the support system</p>
+        </div>
+
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
+          <div className="bg-accent-coral/15 border border-accent-coral/30 text-accent-coral p-3 rounded-enterprise mb-5 text-sm font-semibold">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleLogin}>
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
-              Email
-            </label>
+        <form onSubmit={handleLogin} className="space-y-5">
+          <div>
+            <label className="label-field">Email</label>
             <input
-              id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              className="input-field"
               required
+              autoComplete="email"
             />
           </div>
-
-          <div className="mb-6">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
-              Password
-            </label>
+          <div>
+            <label className="label-field">Password</label>
             <input
-              id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline"
+              className="input-field"
               required
+              autoComplete="current-password"
             />
           </div>
-
-          <div className="flex items-center justify-center">
-            <button
-              type="submit"
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full"
-            >
-              Sign In
-            </button>
-          </div>
+          <button type="submit" disabled={submitting} className="btn-primary w-full">
+            {submitting ? "Signing in..." : "Sign In"}
+          </button>
         </form>
       </div>
     </div>

@@ -1,38 +1,50 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
-import ProtectedRoute from "./components/ProtectedRoute";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import AgentDashboard from "./pages/AgentDashboard";
 import TeamLeadDashboard from "./pages/TeamLeadDashboard";
+import CreateUser from "./pages/CreateUser";
+import { AuthProvider } from "./context/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <Router>
         <Routes>
-          <Route path="/" element={<Navigate to="/login" />} />
-          
           <Route path="/login" element={<Login />} />
-          
-          <Route 
-            path="/agent" 
+
+          {/* Any logged-in user can access the Agent view */}
+          <Route
+            path="/agent"
             element={
               <ProtectedRoute>
                 <AgentDashboard />
               </ProtectedRoute>
-            } 
+            }
           />
-          
-          <Route 
-            path="/tl" 
+
+          {/* Only users with the team_lead role can access this view */}
+          <Route
+            path="/team-lead"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredRole="team_lead">
                 <TeamLeadDashboard />
               </ProtectedRoute>
-            } 
+            }
           />
+
+          <Route
+            path="/create-user"
+            element={
+              <ProtectedRoute requiredRole="team_lead">
+                <CreateUser />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
-      </BrowserRouter>
+      </Router>
     </AuthProvider>
   );
 }

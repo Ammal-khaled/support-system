@@ -1,28 +1,62 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "../firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "../firebase";
 
-const AuthContext = createContext();
+const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
-      setLoading(false);
+
+      if (!user) {
+        setUserProfile(null);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        setUserProfile(
+          userDoc.exists()
+            ? { id: userDoc.id, ...userDoc.data() }
+            : { id: user.uid, email: user.email, role: "agent" }
+        );
+      } catch (error) {
+        console.error("Failed to load user profile:", error);
+        setUserProfile({ id: user.uid, email: user.email, role: "agent" });
+      } finally {
+        setLoading(false);
+      }
     });
+
     return unsubscribe;
   }, []);
 
-  return (
-    <AuthContext.Provider value={{ currentUser }}>
-      {!loading && children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({
+      currentUser,
+      userProfile,
+      loading,
+      role: userProfile?.role || null,
+    }),
+    [currentUser, userProfile, loading]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
-  return useContext(AuthContext);
+  const context = useContext(AuthContext);
+
+  if (!context) {
+    throw new Error("useAuth must be used inside an AuthProvider");
+  }
+
+  return context;
 }

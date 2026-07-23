@@ -1,83 +1,98 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { logoutUser } from "../services/auth";
-
-// Dummy data to simulate our Firebase database
-const dummyProcesses = [
-  { id: 1, title: "Password Reset", type: "Simple", description: "Standard steps to reset a customer password." },
-  { id: 2, title: "Refund Request", type: "Complex", description: "Multi-step approval process for issuing refunds." },
-  { id: 3, title: "Update Billing Info", type: "Simple", description: "How to update credit card details." },
-  { id: 4, title: "Account Cancellation", type: "Complex", description: "Retention workflow and cancellation routing." },
-];
+import { useState, useEffect } from "react";
+import { subscribePolicies } from "../services/firestore";
+import { useAuth } from "../context/AuthContext";
+import ActionSelector from "../components/ActionSelector";
+import Sidebar from "../components/Sidebar";
 
 export default function AgentDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
-  const navigate = useNavigate();
+  const [policies, setPolicies] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const { userProfile } = useAuth();
 
-  const handleLogout = async () => {
-    await logoutUser();
-    navigate("/login");
-  };
+  useEffect(() => {
+    const unsubscribe = subscribePolicies(
+      (data) => {
+        setPolicies(data);
+        setLoading(false);
+        setError("");
+      },
+      () => {
+        setError("Unable to load the knowledge base.");
+        setLoading(false);
+      }
+    );
 
-  const filteredProcesses = dummyProcesses.filter((process) =>
-    process.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+    return unsubscribe;
+  }, []);
+
+  const filteredPolicies = policies.filter((policy) => {
+    const q = searchQuery.toLowerCase();
+    const titleMatch = policy.title?.toLowerCase().includes(q);
+    const contentMatch = policy.content?.toLowerCase().includes(q);
+    const categoryMatch = policy.category?.toLowerCase().includes(q);
+    return titleMatch || contentMatch || categoryMatch;
+  });
+
+  const greeting = userProfile?.name || "Agent";
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation Bar */}
-      <nav className="bg-white shadow-sm px-6 py-4 flex justify-between items-center">
-        <h1 className="text-xl font-bold text-gray-800">CSR Knowledge Base</h1>
-        <button
-          onClick={handleLogout}
-          className="text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
-        >
-          Sign Out
-        </button>
-      </nav>
+    <div className="page-bg flex">
+      <Sidebar />
 
-      {/* Main Content */}
-      <main className="max-w-5xl mx-auto px-6 py-8">
-        
-        {/* Search Section */}
+      <div className="flex-1 ml-[260px] p-8">
+        <div className="max-w-4xl mx-auto">
+        <header className="mb-8">
+          <h2 className="page-title">Knowledge Base</h2>
+          <p className="page-subtitle">Welcome, {greeting}. Search policies and log actions during your call.</p>
+        </header>
+
+        <ActionSelector />
+
         <div className="mb-8">
           <input
             type="text"
-            placeholder="Search processes (e.g., 'Refund')..."
+            placeholder="Search policies by title, content, or category..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full md:w-1/2 px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+            className="input-field text-base"
           />
         </div>
 
-        {/* Process Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProcesses.length > 0 ? (
-            filteredProcesses.map((process) => (
-              <div
-                key={process.id}
-                className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
-              >
-                <div className="flex justify-between items-start mb-3">
-                  <h3 className="font-semibold text-gray-800">{process.title}</h3>
-                  <span
-                    className={`text-xs font-bold px-2 py-1 rounded-full ${
-                      process.type === "Simple"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-orange-100 text-orange-700"
-                    }`}
-                  >
-                    {process.type}
-                  </span>
+        {loading ? (
+          <p className="text-text-muted text-center py-8">Loading policies...</p>
+        ) : error ? (
+          <div className="card p-8 text-center">
+            <p className="text-accent-coral font-semibold">{error}</p>
+          </div>
+        ) : filteredPolicies.length === 0 ? (
+          <div className="card p-8 text-center">
+            <p className="text-text-muted">
+              {searchQuery ? "No policies found matching your search." : "No policies in the knowledge base yet."}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredPolicies.map((policy) => (
+              <article key={policy.id} className="card p-6">
+                <div className="flex items-start justify-between gap-4 mb-2">
+                  <h3 className="font-display text-xl font-semibold text-text-main">
+                    {policy.title || "Untitled Policy"}
+                  </h3>
+                  {policy.category && (
+                    <span className="shrink-0 text-xs font-semibold text-accent-cyan bg-mission-bg border border-mission-border px-2.5 py-1 rounded-full">
+                      {policy.category}
+                    </span>
+                  )}
                 </div>
-                <p className="text-gray-600 text-sm">{process.description}</p>
-              </div>
-            ))
-          ) : (
-            <p className="text-gray-500 col-span-full">No processes found matching your search.</p>
-          )}
+                <p className="text-text-muted leading-relaxed">{policy.content || "No content available."}</p>
+              </article>
+            ))}
+          </div>
+        )}
         </div>
-      </main>
+      </div>
     </div>
   );
 }
