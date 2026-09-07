@@ -18,25 +18,43 @@ service cloud.firestore {
       return signedIn() && callerRole() in ['team_lead', 'quality_supervisor'];
     }
 
+    function ownsExistingAgentRecord() {
+      return signedIn() && resource.data.agentId == request.auth.uid;
+    }
+
+    function ownsIncomingAgentRecord() {
+      return signedIn() && request.resource.data.agentId == request.auth.uid;
+    }
+
+    function ownsExistingTicket() {
+      return signedIn() && resource.data.createdById == request.auth.uid;
+    }
+
+    function ownsIncomingTicket() {
+      return signedIn() && request.resource.data.createdById == request.auth.uid;
+    }
+
     match /banned_phrases/{document} {
       allow read: if signedIn();
       allow write: if isTeamLead();
     }
 
     match /flags/{document} {
-      allow create: if signedIn()
-        && request.resource.data.agentId == request.auth.uid;
-      allow read, update: if canReview();
+      allow create: if ownsIncomingAgentRecord();
+      allow read: if canReview() || ownsExistingAgentRecord();
+      allow update: if canReview();
     }
 
     match /agent_actions/{document} {
-      allow create: if signedIn() && request.resource.data.agentId == request.auth.uid;
-      allow read: if canReview();
+      allow create: if ownsIncomingAgentRecord();
+      allow read: if canReview() || ownsExistingAgentRecord();
     }
 
     match /tickets/{document} {
-      allow create, read: if signedIn();
-      allow update: if canReview();
+      allow create: if ownsIncomingTicket();
+      allow read: if canReview() || ownsExistingTicket();
+      allow update: if canReview()
+        || (ownsExistingTicket() && request.resource.data.createdById == request.auth.uid);
     }
 
     match /users/{uid} {

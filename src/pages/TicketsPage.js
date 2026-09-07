@@ -75,11 +75,12 @@ export default function TicketsPage() {
       () => {
         setError("Unable to load tickets.");
         setLoading(false);
-      }
+      },
+      canViewTeam ? undefined : currentUser?.uid
     );
 
     return unsubscribe;
-  }, []);
+  }, [canViewTeam, currentUser?.uid]);
 
   const visibleTickets = useMemo(() => {
     const search = query.trim().toLowerCase();
