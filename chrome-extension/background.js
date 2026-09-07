@@ -1,12 +1,13 @@
 importScripts("auth.js");
 const FIREBASE_PROJECT_ID = "csr-support-system";
 // Replace with the final Netlify URL after the first deploy.
-const DASHBOARD_URL = "https://YOUR-NETLIFY-SITE.netlify.app";
+const DASHBOARD_URL = "https://aquacooldesk.netlify.app";
 const FIRESTORE_BASE_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
 const FIRESTORE_COMMIT_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:commit`;
 
 function generateFirestoreId() {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   let id = "";
 
   for (let i = 0; i < 20; i++) {
@@ -26,14 +27,15 @@ async function fetchCollection(collectionName) {
     const response = await fetch(`${FIRESTORE_BASE_URL}/${collectionName}`, {
       headers: { Authorization: `Bearer ${session.idToken}` },
     });
-    if (!response.ok) throw new Error(`Could not load ${collectionName}: ${response.status}`);
+    if (!response.ok)
+      throw new Error(`Could not load ${collectionName}: ${response.status}`);
     const data = await response.json();
 
     if (!data.documents) return [];
 
     return data.documents.map((document) => ({
       id: document.name.split("/").pop(),
-      fields: document.fields || {}
+      fields: document.fields || {},
     }));
   } catch (error) {
     console.error(`Error fetching ${collectionName}:`, error);
@@ -49,7 +51,7 @@ async function getBannedPhrases() {
     wrongPhrase: getStringField(document.fields, "wrongPhrase"),
     correctPhrase: getStringField(document.fields, "correctPhrase"),
     severity: getStringField(document.fields, "severity"),
-    category: getStringField(document.fields, "category")
+    category: getStringField(document.fields, "category"),
   }));
 }
 
@@ -59,7 +61,7 @@ async function getKbArticles() {
   return documents.map((document) => ({
     id: document.id,
     title: getStringField(document.fields, "title"),
-    content: getStringField(document.fields, "content")
+    content: getStringField(document.fields, "content"),
   }));
 }
 
@@ -72,14 +74,18 @@ function extractSnippet(transcript, matchedPhrase) {
   const sentences = transcript.match(sentencePattern) || [transcript];
   const normalizedPhrase = matchedPhrase.toLowerCase();
   const matchIndex = sentences.findIndex((sentence) =>
-    sentence.toLowerCase().includes(normalizedPhrase)
+    sentence.toLowerCase().includes(normalizedPhrase),
   );
 
   if (matchIndex === -1) {
     return transcript.slice(0, 240);
   }
 
-  return sentences.slice(matchIndex, matchIndex + 2).join(" ").trim().slice(0, 240);
+  return sentences
+    .slice(matchIndex, matchIndex + 2)
+    .join(" ")
+    .trim()
+    .slice(0, 240);
 }
 
 function findPhraseMatch(transcript, phrases) {
@@ -87,13 +93,17 @@ function findPhraseMatch(transcript, phrases) {
 
   return phrases.find((phrase) => {
     if (!phrase.wrongPhrase) return false;
-    const pattern = new RegExp(`\\b${escapeRegExp(phrase.wrongPhrase.toLowerCase())}\\b`, "i");
+    const pattern = new RegExp(
+      `\\b${escapeRegExp(phrase.wrongPhrase.toLowerCase())}\\b`,
+      "i",
+    );
     return pattern.test(normalizedTranscript);
   });
 }
 
 function findKbFactMismatch(transcript, kbArticles) {
-  const timelinePattern = /\b(\d{1,3})\s*(day|days|hour|hours|week|weeks|month|months)\b/i;
+  const timelinePattern =
+    /\b(\d{1,3})\s*(day|days|hour|hours|week|weeks|month|months)\b/i;
   const transcriptFact = transcript.match(timelinePattern);
 
   if (!transcriptFact) return null;
@@ -112,7 +122,7 @@ function findKbFactMismatch(transcript, kbArticles) {
         correctPhrase: articleValue,
         severity: "critical",
         category: "kb_fact_mismatch",
-        kbArticleId: article.id
+        kbArticleId: article.id,
       };
     }
   }
@@ -124,19 +134,27 @@ async function getAgentContext() {
   const session = await getAuthSession();
   return {
     agentId: session.uid,
-    agentName: session.name
+    agentName: session.name,
   };
 }
 
-async function writeFlag({ agentId, agentName, type, matchedPhrase, kbArticleId, transcriptSnippet }) {
+async function writeFlag({
+  agentId,
+  agentName,
+  type,
+  matchedPhrase,
+  kbArticleId,
+  transcriptSnippet,
+}) {
   const documentId = generateFirestoreId();
   const session = await getAuthSession();
-  if (agentId !== session.uid) throw new Error("Extension account changed. Please retry.");
+  if (agentId !== session.uid)
+    throw new Error("Extension account changed. Please retry.");
   const response = await fetch(FIRESTORE_COMMIT_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${session.idToken}`
+      Authorization: `Bearer ${session.idToken}`,
     },
     body: JSON.stringify({
       writes: [
@@ -148,20 +166,22 @@ async function writeFlag({ agentId, agentName, type, matchedPhrase, kbArticleId,
               agentName: { stringValue: agentName },
               type: { stringValue: type },
               matchedPhrase: { stringValue: matchedPhrase },
-              kbArticleId: kbArticleId ? { stringValue: kbArticleId } : { nullValue: null },
+              kbArticleId: kbArticleId
+                ? { stringValue: kbArticleId }
+                : { nullValue: null },
               transcriptSnippet: { stringValue: transcriptSnippet },
-              reviewed: { booleanValue: false }
-            }
+              reviewed: { booleanValue: false },
+            },
           },
           updateTransforms: [
             {
               fieldPath: "timestamp",
-              setToServerValue: "REQUEST_TIME"
-            }
-          ]
-        }
-      ]
-    })
+              setToServerValue: "REQUEST_TIME",
+            },
+          ],
+        },
+      ],
+    }),
   });
   if (!response.ok) throw new Error(`Flag write failed: ${response.status}`);
   return documentId;
@@ -169,36 +189,65 @@ async function writeFlag({ agentId, agentName, type, matchedPhrase, kbArticleId,
 
 async function createCriticalTicket(flagId, agentContext, matchedPhrase) {
   const session = await getAuthSession();
-  if (session.uid !== agentContext.agentId) throw new Error("Extension account changed.");
+  if (session.uid !== agentContext.agentId)
+    throw new Error("Extension account changed.");
   const response = await fetch(FIRESTORE_COMMIT_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.idToken}` },
-    body: JSON.stringify({ writes: [{
-      currentDocument: { exists: false },
-      update: {
-        name: `projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/tickets/critical_${flagId}`,
-        fields: {
-          title: { stringValue: `Critical phrase: ${matchedPhrase.slice(0, 160)}` },
-          status: { stringValue: "Open" }, priority: { stringValue: "High" },
-          department: { stringValue: "Quality" }, source: { stringValue: "critical_flag" },
-          flagId: { stringValue: flagId },
-          flagRef: { referenceValue: `projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/flags/${flagId}` },
-          createdById: { stringValue: agentContext.agentId },
-          createdByName: { stringValue: agentContext.agentName },
-          description: { stringValue: "Review the linked critical flag and coach the agent." },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.idToken}`,
+    },
+    body: JSON.stringify({
+      writes: [
+        {
+          currentDocument: { exists: false },
+          update: {
+            name: `projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/tickets/critical_${flagId}`,
+            fields: {
+              title: {
+                stringValue: `Critical phrase: ${matchedPhrase.slice(0, 160)}`,
+              },
+              status: { stringValue: "Open" },
+              priority: { stringValue: "High" },
+              department: { stringValue: "Quality" },
+              source: { stringValue: "critical_flag" },
+              flagId: { stringValue: flagId },
+              flagRef: {
+                referenceValue: `projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/flags/${flagId}`,
+              },
+              createdById: { stringValue: agentContext.agentId },
+              createdByName: { stringValue: agentContext.agentName },
+              description: {
+                stringValue:
+                  "Review the linked critical flag and coach the agent.",
+              },
+            },
+          },
+          updateTransforms: ["createdAt", "updatedAt"].map((fieldPath) => ({
+            fieldPath,
+            setToServerValue: "REQUEST_TIME",
+          })),
         },
-      },
-      updateTransforms: ["createdAt", "updatedAt"].map((fieldPath) => ({ fieldPath, setToServerValue: "REQUEST_TIME" })),
-    }] }),
+      ],
+    }),
   });
   if (!response.ok) {
     const data = await response.json();
-    if (data.error?.status !== "ALREADY_EXISTS") throw new Error(`Ticket write failed: ${response.status}`);
+    if (data.error?.status !== "ALREADY_EXISTS")
+      throw new Error(`Ticket write failed: ${response.status}`);
   }
 }
 
-async function checkCritical(transcript, bannedPhrases, kbArticles, agentContext, sender) {
-  const criticalPhrases = bannedPhrases.filter((phrase) => phrase.severity === "critical");
+async function checkCritical(
+  transcript,
+  bannedPhrases,
+  kbArticles,
+  agentContext,
+  sender,
+) {
+  const criticalPhrases = bannedPhrases.filter(
+    (phrase) => phrase.severity === "critical",
+  );
   const phraseMatch = findPhraseMatch(transcript, criticalPhrases);
   const kbMismatch = findKbFactMismatch(transcript, kbArticles);
   const match = phraseMatch || kbMismatch;
@@ -213,7 +262,7 @@ async function checkCritical(transcript, bannedPhrases, kbArticles, agentContext
     type: "critical",
     matchedPhrase,
     kbArticleId: match.kbArticleId || null,
-    transcriptSnippet
+    transcriptSnippet,
   });
 
   if (sender.tab?.id) {
@@ -226,14 +275,16 @@ async function checkCritical(transcript, bannedPhrases, kbArticles, agentContext
         : null,
       message: match.correctPhrase
         ? `Critical policy alert: replace "${matchedPhrase}" with "${match.correctPhrase}".`
-        : `Critical policy alert: "${matchedPhrase}" conflicts with the live knowledge base.`
+        : `Critical policy alert: "${matchedPhrase}" conflicts with the live knowledge base.`,
     });
   }
   await createCriticalTicket(flagId, agentContext, matchedPhrase);
 }
 
 async function logSoftSkill(transcript, bannedPhrases, agentContext) {
-  const softSkillPhrases = bannedPhrases.filter((phrase) => phrase.severity === "soft_skill");
+  const softSkillPhrases = bannedPhrases.filter(
+    (phrase) => phrase.severity === "soft_skill",
+  );
   const match = findPhraseMatch(transcript, softSkillPhrases);
 
   if (!match) return;
@@ -243,7 +294,7 @@ async function logSoftSkill(transcript, bannedPhrases, agentContext) {
     type: "soft_skill",
     matchedPhrase: match.wrongPhrase,
     kbArticleId: null,
-    transcriptSnippet: extractSnippet(transcript, match.wrongPhrase)
+    transcriptSnippet: extractSnippet(transcript, match.wrongPhrase),
   });
 }
 
@@ -263,9 +314,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     Promise.all([getBannedPhrases(), getKbArticles(), getAgentContext()])
       .then(([bannedPhrases, kbArticles, agentContext]) =>
         Promise.all([
-          checkCritical(transcript, bannedPhrases, kbArticles, agentContext, sender),
-          logSoftSkill(transcript, bannedPhrases, agentContext)
-        ])
+          checkCritical(
+            transcript,
+            bannedPhrases,
+            kbArticles,
+            agentContext,
+            sender,
+          ),
+          logSoftSkill(transcript, bannedPhrases, agentContext),
+        ]),
       )
       .then(() => sendResponse({ status: "complete" }))
       .catch((error) => {
