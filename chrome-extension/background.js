@@ -1,6 +1,7 @@
 importScripts("auth.js");
 const FIREBASE_PROJECT_ID = "csr-support-system";
-const DASHBOARD_URL = "http://localhost:3000";
+// Replace with the final Netlify URL after the first deploy.
+const DASHBOARD_URL = "https://YOUR-NETLIFY-SITE.netlify.app";
 const FIRESTORE_BASE_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
 const FIRESTORE_COMMIT_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:commit`;
 

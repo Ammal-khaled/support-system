@@ -1,5 +1,7 @@
 # AquaDesk AI Worker
 
+This uses the Gemini API through Google AI Studio's free tier with the API key stored as a Cloudflare Worker secret. Do not enable billing or place the key in the React app.
+
 This Worker keeps the Gemini API key out of the React bundle. The key is stored as a Cloudflare secret and must never be committed to this repository.
 
 ## Deploy

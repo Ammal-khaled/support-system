@@ -16,7 +16,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "node ./node_modules/react-scripts/bin/react-scripts.js build",
     "users:demo": "node scripts/ensureDemoUsers.js",
     "seed:aquacool": "node scripts/seedAquacoolKnowledge.js",
     "seed:demo": "node scripts/seedDemoData.js",

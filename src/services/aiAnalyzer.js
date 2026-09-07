@@ -1,5 +1,4 @@
-const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE";
-const GEMINI_MODEL = "gemini-1.5-flash";
+const AI_WORKER_URL = process.env.REACT_APP_AI_WORKER_URL || "";
 
 const SOFT_SKILL_RULES = [
   {
@@ -19,20 +18,6 @@ const SOFT_SKILL_RULES = [
     prefer: "I can hear this is frustrating. I am here with you and will help.",
   },
 ];
-
-const SYSTEM_PROMPT = `You are a CSR Soft-Skills Coach reviewing a saved post-call transcript snippet.
-
-You are Tier 2 only. Do not evaluate real-time critical policy violations. Do not do keyword flagging for Tier 1. Your job is to evaluate tone, empathy, ownership, clarity, and professionalism.
-
-Rules to check:
-${SOFT_SKILL_RULES.map((rule) => `- Never say "${rule.avoid}". Coach toward: "${rule.prefer}"`).join("\n")}
-
-Return only valid JSON with this exact shape:
-{
-  "isCompliant": boolean,
-  "feedback": "one concise coaching tip",
-  "severity": "soft_skill"
-}`;
 
 function extractJson(text) {
   const cleaned = String(text || "")
@@ -65,32 +50,18 @@ export async function analyzeSoftSkills(transcriptSnippet) {
     throw new Error("Transcript snippet is required.");
   }
 
+  if (!AI_WORKER_URL) {
+    throw new Error("AI coaching is not configured. Set REACT_APP_AI_WORKER_URL.");
+  }
+
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+    AI_WORKER_URL,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: SYSTEM_PROMPT }],
-        },
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: `Evaluate this CSR transcript snippet for soft skills only:\n\n${transcriptSnippet.trim()}`,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: "application/json",
-        },
-      }),
+      body: JSON.stringify({ transcriptSnippet: transcriptSnippet.trim() }),
     }
   );
 
@@ -99,7 +70,7 @@ export async function analyzeSoftSkills(transcriptSnippet) {
   }
 
   const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const text = data.feedback ? JSON.stringify(data) : data.candidates?.[0]?.content?.parts?.[0]?.text;
 
   if (!text) {
     throw new Error("Gemini response was empty.");
