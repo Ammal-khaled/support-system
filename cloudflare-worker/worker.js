@@ -4,7 +4,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const GEMINI_MODEL = "gemini-2.5-flash-lite";
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
 
 const systemPrompt = `You are a CSR soft-skills coach reviewing a post-call transcript snippet.
 Evaluate tone, empathy, ownership, clarity, and professionalism only. Do not evaluate
