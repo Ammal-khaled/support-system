@@ -17,3 +17,4 @@ export const logoutUser = async () => {
     console.error("Error signing out:", error);
   }
 };
+

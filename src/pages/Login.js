@@ -34,21 +34,56 @@ export default function Login() {
     }
 
     const userDoc = await getDoc(doc(db, "users", user.uid));
-    const role = userDoc.exists() ? userDoc.data().role : "agent";
-    navigate(role === "team_lead" ? "/team-lead" : "/agent");
+    const profile = userDoc.exists() ? userDoc.data() : { role: "agent" };
+    if (profile.mustChangePassword) {
+      navigate("/change-password");
+    } else {
+      navigate(profile.role === "team_lead" ? "/team-lead" : "/agent");
+    }
     setSubmitting(false);
   };
 
   return (
-    <div className="page-bg flex items-center justify-center p-4">
-      <div className="card w-full max-w-md p-8">
+    <div className="page-bg flex min-h-screen items-center justify-center p-4">
+      <div className="glass-card w-full max-w-[980px] overflow-hidden lg:grid lg:grid-cols-[1.05fr_0.95fr]">
+        <section className="hidden bg-slate-950 p-10 text-white lg:flex lg:flex-col lg:justify-between">
+          <div>
+            <div className="mb-8 inline-flex rounded-2xl bg-white p-3">
+              <img
+                src="https://aquacool.me/images/logo.png"
+                alt="Aquacool Metering"
+                className="h-12 w-auto object-contain"
+              />
+            </div>
+            <h1 className="max-w-sm text-4xl font-extrabold leading-tight tracking-tight">
+              AquaDesk
+            </h1>
+            <p className="mt-4 max-w-md text-sm leading-6 text-slate-300">
+              Aquacool support operations, knowledge workflows, and agent guidance in one workspace.
+            </p>
+          </div>
+
+        </section>
+
+        <section className="p-8 md:p-10">
         <div className="text-center mb-8">
-          <h1 className="font-display text-2xl font-semibold text-text-main">Aamer CSR Portal</h1>
-          <p className="text-text-muted mt-2 text-sm">Sign in to access the support system</p>
+          <div className="mx-auto mb-4 inline-flex rounded-2xl bg-white p-3 lg:hidden">
+            <img
+              src="https://aquacool.me/images/logo.png"
+              alt="Aquacool Metering"
+              className="h-12 w-auto object-contain"
+            />
+          </div>
+          <h1 className="font-sans text-3xl font-extrabold tracking-tight text-slate-950">
+            AquaDesk
+          </h1>
+          <p className="text-semantic-neutral mt-2 text-sm">
+            Sign in to access Aquacool support operations.
+          </p>
         </div>
 
         {error && (
-          <div className="bg-accent-coral/15 border border-accent-coral/30 text-accent-coral p-3 rounded-enterprise mb-5 text-sm font-semibold">
+          <div className="bg-semantic-error/15 border border-semantic-error/30 text-semantic-error p-3 rounded-xl mb-5 text-sm font-semibold">
             {error}
           </div>
         )}
@@ -80,7 +115,9 @@ export default function Login() {
             {submitting ? "Signing in..." : "Sign In"}
           </button>
         </form>
+        </section>
       </div>
     </div>
   );
 }
+

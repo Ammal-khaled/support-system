@@ -3,13 +3,16 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   limit,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
+  where,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -61,12 +64,39 @@ export const subscribePolicies = (callback, onError) =>
 export const getPolicies = () =>
   fetchCollection("knowledge_base", (rows) => sortByText(rows, ["title", "category"]));
 
-export const addPolicy = async (title, content, category) => {
+export const getPolicyById = async (id) => {
   try {
+    const policyDoc = await getDoc(doc(db, "knowledge_base", id));
+    if (!policyDoc.exists()) return null;
+    return { id: policyDoc.id, ...policyDoc.data() };
+  } catch (error) {
+    console.error("Error fetching policy:", error);
+    return null;
+  }
+};
+
+export const getUserById = async (id) => {
+  try {
+    const userDoc = await getDoc(doc(db, "users", id));
+    if (!userDoc.exists()) return null;
+    return { id: userDoc.id, ...userDoc.data() };
+  } catch (error) {
+    console.error("Error fetching user:", error);
+    return null;
+  }
+};
+
+function normalizePolicyInput(titleOrPolicy, content, category) {
+  return typeof titleOrPolicy === "object"
+    ? titleOrPolicy
+    : { title: titleOrPolicy, content, category };
+}
+
+export const addPolicy = async (titleOrPolicy, content, category) => {
+  try {
+    const policy = normalizePolicyInput(titleOrPolicy, content, category);
     await addDoc(collection(db, "knowledge_base"), {
-      title,
-      content,
-      category,
+      ...policy,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -77,12 +107,11 @@ export const addPolicy = async (title, content, category) => {
   }
 };
 
-export const updatePolicy = async (id, title, content, category) => {
+export const updatePolicy = async (id, titleOrPolicy, content, category) => {
   try {
+    const policy = normalizePolicyInput(titleOrPolicy, content, category);
     await updateDoc(doc(db, "knowledge_base", id), {
-      title,
-      content,
-      category,
+      ...policy,
       updatedAt: serverTimestamp(),
     });
     return true;
@@ -215,8 +244,10 @@ export const deleteActionType = async (id) => {
   }
 };
 
-export const subscribeFlags = (callback, onError) => {
-  const flagsQuery = query(collection(db, "flags"), orderBy("timestamp", "desc"), limit(50));
+export const subscribeFlags = (callback, onError, agentId) => {
+  const flagsQuery = query(collection(db, "flags"),
+    ...(agentId ? [where("agentId", "==", agentId)] : []),
+    orderBy("timestamp", "desc"), ...(agentId ? [] : [limit(50)]));
 
   return onSnapshot(
     flagsQuery,
@@ -256,8 +287,10 @@ export const addSoftSkillFlag = async ({
   });
 };
 
-export const subscribeAgentActions = (callback, onError) => {
-  const actionsQuery = query(collection(db, "agent_actions"), orderBy("timestamp", "desc"), limit(50));
+export const subscribeAgentActions = (callback, onError, agentId) => {
+  const actionsQuery = query(collection(db, "agent_actions"),
+    ...(agentId ? [where("agentId", "==", agentId)] : []),
+    orderBy("timestamp", "desc"), ...(agentId ? [] : [limit(50)]));
 
   return onSnapshot(
     actionsQuery,
@@ -269,11 +302,128 @@ export const subscribeAgentActions = (callback, onError) => {
   );
 };
 
-export const logAgentAction = async ({ agentId, agentName, actionType }) => {
+export const getAgentFlagsByDateRange = async (agentId, startDate, endDate) => {
+  const snapshot = await getDocs(query(
+    collection(db, "flags"),
+    where("agentId", "==", agentId),
+    where("timestamp", ">=", startDate),
+    where("timestamp", "<=", endDate),
+    orderBy("timestamp", "desc")
+  ));
+  return mapSnapshot(snapshot);
+};
+
+export const getAgentActionsByDateRange = async (agentId, startDate, endDate) => {
+  const snapshot = await getDocs(query(
+    collection(db, "agent_actions"),
+    where("agentId", "==", agentId),
+    where("timestamp", ">=", startDate),
+    where("timestamp", "<=", endDate),
+    orderBy("timestamp", "desc")
+  ));
+  return mapSnapshot(snapshot);
+};
+
+export const logAgentAction = async ({ agentId, agentName, actionType, source }) => {
   await addDoc(collection(db, "agent_actions"), {
     agentId,
     agentName,
     actionType,
+    source: source || "configured_quick_action",
     timestamp: serverTimestamp(),
   });
 };
+
+export const subscribeTickets = (callback, onError, agentId) => {
+  const ticketsQuery = agentId
+    ? query(collection(db, "tickets"), where("createdById", "==", agentId))
+    : query(collection(db, "tickets"), orderBy("updatedAt", "desc"), limit(100));
+
+  return onSnapshot(
+    ticketsQuery,
+    (snapshot) => callback(mapSnapshot(snapshot)),
+    (error) => {
+      console.error("Error listening to tickets:", error);
+      if (onError) onError(error);
+    }
+  );
+};
+
+export const createTicket = async (ticket) => {
+  const now = serverTimestamp();
+
+  return addDoc(collection(db, "tickets"), {
+    ...ticket,
+    status: ticket.status || "Open",
+    createdAt: now,
+    updatedAt: now,
+  });
+};
+
+export const updateTicket = async (id, updates) => {
+  await updateDoc(doc(db, "tickets", id), {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  });
+};
+
+// Resolve old name-only bookmarks without guessing when names are duplicated.
+export const resolveAgentId = async (name) => {
+  const sources = [["flags", "agentName", "agentId"],
+    ["agent_actions", "agentName", "agentId"], ["tickets", "createdByName", "createdById"]];
+  const ids = new Set();
+  await Promise.all(sources.map(async ([collectionName, nameField, idField]) => {
+    const snapshot = await getDocs(query(collection(db, collectionName), where(nameField, "==", name)));
+    snapshot.docs.forEach((item) => {
+      const id = item.data()[idField];
+      if (id) ids.add(id);
+    });
+  }));
+  if (ids.size !== 1) throw new Error("Open this agent from the Agents tab to select their unique ID.");
+  return [...ids][0];
+};
+
+export const subscribeCoachingNote = (agentId, callback, onError) =>
+  onSnapshot(
+    doc(db, "agents_coaching_notes", agentId),
+    (snapshot) => callback(snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null),
+    (error) => {
+      console.error("Error listening to coaching note:", error);
+      if (onError) onError(error);
+    }
+  );
+
+export const saveCoachingNote = async (agentId, note, updatedBy, updatedById) => {
+  await setDoc(
+    doc(db, "agents_coaching_notes", agentId),
+    {
+      agentId,
+      note,
+      updatedBy,
+      updatedById,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+};
+
+export const subscribeAgentUsers = (callback, onError) => {
+  const agentsQuery = query(
+    collection(db, "users"),
+    where("role", "==", "agent")
+  );
+
+  return onSnapshot(
+    agentsQuery,
+    (snapshot) => callback(
+      mapSnapshot(snapshot).sort((a, b) =>
+        String(a.name || a.email || "").localeCompare(String(b.name || b.email || ""))
+      )
+    ),
+    (error) => {
+      console.error("Error listening to agent users:", error);
+      if (onError) onError(error);
+    }
+  );
+};
+

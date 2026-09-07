@@ -17,6 +17,9 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
+    "users:demo": "node scripts/ensureDemoUsers.js",
+    "seed:aquacool": "node scripts/seedAquacoolKnowledge.js",
+    "seed:demo": "node scripts/seedDemoData.js",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },

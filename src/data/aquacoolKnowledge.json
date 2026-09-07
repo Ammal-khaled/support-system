@@ -1,0 +1,322 @@
+[
+  {
+    "id": "sd-refunds-transfer",
+    "title": "Security Deposit Refund Transfer",
+    "category": "Refunds",
+    "priority": "High",
+    "summary": "Guide customers to submit the SD refund transfer form and verify the required refund details before escalation.",
+    "customerQuestions": [
+      "Is the customer requesting a security deposit refund?",
+      "Has the move-out or final bill process already been completed?",
+      "Can the customer provide the registered account, unit, and bank transfer details?"
+    ],
+    "agentSteps": [
+      "Share the SD Refunds Transfer Form QR code or refund link.",
+      "Confirm the customer uses the same account details registered with Aquacool.",
+      "Advise the customer to attach any required final bill, clearance, or identification documents.",
+      "Log the refund request and route incomplete submissions back to the customer with the missing item clearly stated."
+    ],
+    "sourceFiles": [
+      "AQC SD Refund Process b Project.xlsx",
+      "Refund Link.pdf",
+      "QRCode for SD REFUNDS TRANSFER FORM(3) (1)(1) - Copy.png"
+    ],
+    "asset": "/aquacool-assets/sd-refunds-transfer-form-qr.png",
+    "keywords": ["refund", "security deposit", "sd", "bank transfer", "qr"]
+  },
+  {
+    "id": "customer-registration",
+    "title": "Customer Registration",
+    "category": "Registration",
+    "priority": "High",
+    "summary": "Register a customer for Aquacool service using the approved customer registration steps and required account details.",
+    "customerQuestions": [
+      "Is the customer an owner or tenant?",
+      "Which project, building, unit, and account are involved?",
+      "Does the customer have the required ID and ownership or tenancy documents?"
+    ],
+    "agentSteps": [
+      "Identify whether the request is new registration, move-in registration, or future registration.",
+      "Collect customer contact information, unit details, and supporting documents.",
+      "Check whether registration is on time, late, or future dated.",
+      "Submit the completed registration request and explain expected processing timing."
+    ],
+    "sourceFiles": [
+      "Aquacool Customer Registration steps.pdf",
+      "Aquacool Customer Registration steps (2).pdf",
+      "Aquacool Customer Registration steps (3).pdf",
+      "Registration Process.pdf"
+    ],
+    "keywords": ["registration", "customer", "owner", "tenant", "move in"]
+  },
+  {
+    "id": "move-in-request",
+    "title": "Move In Request",
+    "category": "Move In",
+    "priority": "High",
+    "summary": "Handle move-in requests, including on-time, late, future registration, and invoice adjustment scenarios.",
+    "customerQuestions": [
+      "What is the move-in date?",
+      "Is the request on time, late, or for a future move-in?",
+      "Is an invoice adjustment needed because of the move-in timing?"
+    ],
+    "agentSteps": [
+      "Confirm the customer role, unit, project, and move-in date.",
+      "Follow the relevant on-time, late, or future registration path.",
+      "Check whether invoice adjustment rules apply.",
+      "Document the request category clearly before routing it to the responsible team."
+    ],
+    "sourceFiles": [
+      "Aquacool - Customer Registration & Move In Request Steps.pdf",
+      "Move In Process - On time - Late - Future registration - Invoice adjustm....pdf"
+    ],
+    "keywords": ["move in", "registration", "invoice adjustment", "late", "future"]
+  },
+  {
+    "id": "move-out-tenant",
+    "title": "Tenant Move Out",
+    "category": "Move Out",
+    "priority": "High",
+    "summary": "Process tenant move-out requests and collect the required clearance, NOC, and final bill information.",
+    "customerQuestions": [
+      "Is the requester the tenant or an authorized representative?",
+      "Has the owner provided a No Objection Certificate if required?",
+      "Is the customer requesting final bill clearance?"
+    ],
+    "agentSteps": [
+      "Verify tenant identity and unit details.",
+      "Check whether an owner NOC is required for the tenant move-out.",
+      "Collect or confirm final bill and clearance requirements.",
+      "Route the completed move-out package for processing."
+    ],
+    "sourceFiles": [
+      "MIMO - Move out Process.pdf",
+      "Move out Tenant.docx",
+      "Owner's No Objection Certificate (NOC) for Tenant Move-Out (1).pdf",
+      "Owner's No Objection Certificate (NOC) for Tenant Move-Out (2).pdf"
+    ],
+    "keywords": ["move out", "tenant", "noc", "final bill", "clearance"]
+  },
+  {
+    "id": "move-out-owner",
+    "title": "Owner Move Out",
+    "category": "Move Out",
+    "priority": "Medium",
+    "summary": "Guide owner move-out requests and confirm the required final bill or clearance documentation.",
+    "customerQuestions": [
+      "Is the requester the property owner?",
+      "Which project, building, and unit should be cleared?",
+      "Is a clearance letter or final bill required?"
+    ],
+    "agentSteps": [
+      "Verify owner identity and unit details.",
+      "Confirm the requested move-out effective date.",
+      "Prepare the final bill or clearance path based on the customer request.",
+      "Record the request and route supporting documents to the relevant team."
+    ],
+    "sourceFiles": [
+      "MIMO - Move out Process.pdf",
+      "Move out Owner.docx",
+      "Clearance letter Form.pdf"
+    ],
+    "keywords": ["move out", "owner", "clearance", "final bill"]
+  },
+  {
+    "id": "clearance-final-bill",
+    "title": "Clearance and Final Bill",
+    "category": "Clearance",
+    "priority": "High",
+    "summary": "Prepare tenant or owner clearance requests and final bill templates using the correct customer type.",
+    "customerQuestions": [
+      "Is the clearance for an owner or tenant?",
+      "Does the request need a final bill, clearance letter, or both?",
+      "Are all outstanding dues and account details available?"
+    ],
+    "agentSteps": [
+      "Identify customer type and required clearance output.",
+      "Use the matching clearance template.",
+      "Confirm account, unit, and outstanding balance details.",
+      "Submit the clearance request with complete documentation."
+    ],
+    "sourceFiles": [
+      "Clearance (Final Bill) - Tenant - Template.docx",
+      "Clearance (Final Bill) - Tenant - Template (4).docx",
+      "Clearance (Final Bill) (1).docx",
+      "Clearance Letter - DAMAC - Owner.docx",
+      "Clearance Letter - DAMAC - Owner (1) (2).docx",
+      "Clearance letter Form.pdf"
+    ],
+    "keywords": ["clearance", "final bill", "tenant", "owner", "damac"]
+  },
+  {
+    "id": "billing-inquiries",
+    "title": "Billing Inquiry and Bill Explanation",
+    "category": "Billing",
+    "priority": "High",
+    "summary": "Explain Aquacool billing inquiries and route customers to the right billing contact when escalation is needed.",
+    "customerQuestions": [
+      "Which bill period or invoice is the customer asking about?",
+      "Is the concern related to consumption, charges, VAT, or contact details?",
+      "Does the customer need explanation only or a billing team follow-up?"
+    ],
+    "agentSteps": [
+      "Review the bill period and customer account details.",
+      "Explain visible bill components in plain language.",
+      "Use the billing contact list for unresolved inquiries.",
+      "Record the inquiry reason and promised follow-up route."
+    ],
+    "sourceFiles": [
+      "Bill Explaination - AQCM (1).pdf",
+      "Billing Inquiries – Contact Details.pdf",
+      "Dubai Team Contact Details.xlsx"
+    ],
+    "keywords": ["billing", "bill explanation", "invoice", "charges", "contact"]
+  },
+  {
+    "id": "disconnection-reconnection",
+    "title": "Disconnection and Reconnection",
+    "category": "Service Status",
+    "priority": "High",
+    "summary": "Handle disconnection, reconnection, and manual connection cases using the approved flow.",
+    "customerQuestions": [
+      "Is the customer reporting disconnection, reconnection, or manual connection?",
+      "Is the request related to payment, move-in status, or service restoration?",
+      "Has the customer already completed the required payment or documentation?"
+    ],
+    "agentSteps": [
+      "Identify the current service status and reason for the request.",
+      "Follow the disconnection or reconnection flow chart.",
+      "For manual connection, collect the required unit and authorization details.",
+      "Escalate only after required prerequisites are confirmed."
+    ],
+    "sourceFiles": [
+      "AquaCool Disconnection Reconnection Flow Chart.pptx",
+      "Manual Connection Process.pdf",
+      "Disconnection fee waiver - EAG-062882.docx",
+      "Reconnection fee waiver - EAG-129303.docx"
+    ],
+    "keywords": ["disconnection", "reconnection", "manual connection", "service"]
+  },
+  {
+    "id": "fee-waivers",
+    "title": "Fee Waiver Requests",
+    "category": "Waivers",
+    "priority": "Medium",
+    "summary": "Use approved scripts and templates for disconnection, reconnection, LPF, and other waiver requests.",
+    "customerQuestions": [
+      "Which fee is the customer requesting to waive?",
+      "What is the account, project, and reason for the waiver?",
+      "Is there a previous approval, case number, or supporting document?"
+    ],
+    "agentSteps": [
+      "Confirm the exact fee type and customer reason.",
+      "Use the matching waiver script or template.",
+      "Avoid promising approval before review.",
+      "Submit the request with the supporting case details."
+    ],
+    "sourceFiles": [
+      "Waiver script - AQUACOOL.pdf",
+      "Disconnection fee waiver - EAG-062882.docx",
+      "Reconnection fee waiver - EAG-129303.docx",
+      "LPF Waiver 2026EAG-074616.docx"
+    ],
+    "keywords": ["waiver", "fee", "lpf", "disconnection", "reconnection"]
+  },
+  {
+    "id": "contact-details-change",
+    "title": "Contact Details Change",
+    "category": "Account Updates",
+    "priority": "Medium",
+    "summary": "Update customer contact details after verifying identity and collecting the required change request information.",
+    "customerQuestions": [
+      "Which phone number, email, or contact detail needs to be changed?",
+      "Can the customer verify the account and unit details?",
+      "Is the requester authorized to change this account?"
+    ],
+    "agentSteps": [
+      "Verify the requester and account details.",
+      "Capture the old and new contact details clearly.",
+      "Use the contact details change template.",
+      "Confirm the expected processing route and timing."
+    ],
+    "sourceFiles": [
+      "Contact Details Change.docx",
+      "Contact Details Change (1).docx"
+    ],
+    "keywords": ["contact", "email", "phone", "account update"]
+  },
+  {
+    "id": "cheque-verification",
+    "title": "Cheque Verification",
+    "category": "Payments",
+    "priority": "Medium",
+    "summary": "Verify cheque details before accepting or escalating payment-related cases.",
+    "customerQuestions": [
+      "What cheque number, amount, date, and bank are involved?",
+      "Is the cheque connected to a specific account or invoice?",
+      "Are all checklist items present?"
+    ],
+    "agentSteps": [
+      "Review the cheque verification checklist.",
+      "Confirm account, invoice, amount, date, and bank details.",
+      "Flag missing or mismatched information before routing.",
+      "Record the verification status in the customer interaction."
+    ],
+    "sourceFiles": [
+      "Cheque Verification Checklist.pdf",
+      "Aquacool BT Form.pdf",
+      "Undertaking letter Bank Transfer.DOCX"
+    ],
+    "keywords": ["cheque", "payment", "bank transfer", "verification"]
+  },
+  {
+    "id": "resale-process",
+    "title": "Resale Seller and Buyer Process",
+    "category": "Resale",
+    "priority": "Medium",
+    "summary": "Support seller and buyer steps for resale cases and prepare the correct handout or supporting documents.",
+    "customerQuestions": [
+      "Is the caller the seller, buyer, or broker?",
+      "Which unit and project are involved?",
+      "Is the request for guidance, clearance, or ownership transition?"
+    ],
+    "agentSteps": [
+      "Identify whether the caller is seller or buyer.",
+      "Follow the relevant resale process steps.",
+      "Confirm any clearance or NOC requirements.",
+      "Share the correct handout or route to the responsible team."
+    ],
+    "sourceFiles": [
+      "Resale Process - Seller  Buyer Steps - Handout (1).pdf",
+      "NOC Example (1).docx"
+    ],
+    "keywords": ["resale", "seller", "buyer", "noc", "handover"]
+  },
+  {
+    "id": "project-contact-reference",
+    "title": "Project and Contact Reference",
+    "category": "Contacts",
+    "priority": "Medium",
+    "summary": "Use project assignment, CSR project lists, Dubai team details, and terminated project lists to route cases correctly.",
+    "customerQuestions": [
+      "Which project and unit does the customer mention?",
+      "Is the project active or terminated?",
+      "Which internal contact or team owns this request?"
+    ],
+    "agentSteps": [
+      "Confirm the project name and unit details.",
+      "Check whether the project appears in assigned or terminated project references.",
+      "Use the contact list to route the case to the correct team.",
+      "Avoid transferring until the ownership path is confirmed."
+    ],
+    "sourceFiles": [
+      "CS projects assignment-April 2025.xlsx",
+      "CSR Assigned Project Lists.xlsx",
+      "CSR Assigned Project Lists (1).xlsx",
+      "Terminated Projects (2).xlsx",
+      "Dubai Team Contact Details.xlsx",
+      "MS - Aamer.xlsx"
+    ],
+    "keywords": ["project", "contacts", "routing", "terminated", "csr"]
+  }
+]

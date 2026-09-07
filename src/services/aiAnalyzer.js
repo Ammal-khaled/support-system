@@ -35,13 +35,16 @@ Return only valid JSON with this exact shape:
 }`;
 
 function extractJson(text) {
-  const trimmed = text.trim();
+  const cleaned = String(text || "")
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
 
-  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-    return JSON.parse(trimmed);
+  if (cleaned.startsWith("{") && cleaned.endsWith("}")) {
+    return JSON.parse(cleaned);
   }
 
-  const match = trimmed.match(/\{[\s\S]*\}/);
+  const match = cleaned.match(/\{[\s\S]*\}/);
   if (!match) {
     throw new Error("Gemini response did not include JSON.");
   }
@@ -58,7 +61,7 @@ function normalizeResult(result) {
 }
 
 export async function analyzeSoftSkills(transcriptSnippet) {
-  if (!transcriptSnippet?.trim()) {
+  if (typeof transcriptSnippet !== "string" || !transcriptSnippet.trim()) {
     throw new Error("Transcript snippet is required.");
   }
 
@@ -78,7 +81,7 @@ export async function analyzeSoftSkills(transcriptSnippet) {
             role: "user",
             parts: [
               {
-                text: `Evaluate this CSR transcript snippet for soft skills only:\n\n${transcriptSnippet}`,
+                text: `Evaluate this CSR transcript snippet for soft skills only:\n\n${transcriptSnippet.trim()}`,
               },
             ],
           },

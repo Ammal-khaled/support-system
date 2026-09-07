@@ -1,0 +1,65 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function callerRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isTeamLead() {
+      return signedIn() && callerRole() == 'team_lead';
+    }
+
+    function canReview() {
+      return signedIn() && callerRole() in ['team_lead', 'quality_supervisor'];
+    }
+
+    match /banned_phrases/{document} {
+      allow read: if signedIn();
+      allow write: if isTeamLead();
+    }
+
+    match /flags/{document} {
+      allow create: if signedIn()
+        && request.resource.data.agentId == request.auth.uid;
+      allow read, update: if canReview();
+    }
+
+    match /agent_actions/{document} {
+      allow create: if signedIn() && request.resource.data.agentId == request.auth.uid;
+      allow read: if canReview();
+    }
+
+    match /tickets/{document} {
+      allow create, read: if signedIn();
+      allow update: if canReview();
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isTeamLead());
+      allow update: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['mustChangePassword', 'passwordChangedAt', 'updatedAt']);
+      allow write: if isTeamLead();
+    }
+
+    match /knowledge_base/{document} {
+      allow read: if signedIn();
+      allow write: if isTeamLead();
+    }
+
+    match /action_types/{document} {
+      allow read: if signedIn();
+      allow write: if isTeamLead();
+    }
+
+    match /agents_coaching_notes/{agentId} {
+      allow read, write: if canReview();
+    }
+  }
+}

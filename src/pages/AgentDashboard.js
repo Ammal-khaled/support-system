@@ -1,11 +1,31 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { subscribePolicies } from "../services/firestore";
 import { useAuth } from "../context/AuthContext";
 import ActionSelector from "../components/ActionSelector";
 import Sidebar from "../components/Sidebar";
 
+const ALL_CATEGORIES = "All";
+
+const DEPARTMENT_LABELS = {
+  [ALL_CATEGORIES]: "All Departments",
+  "Account Updates": "Accounts",
+  Billing: "Billing",
+  Clearance: "Clearance",
+  Contacts: "Contacts",
+  "Move In": "Move In",
+  "Move Out": "Move Out",
+  Payments: "Payments",
+  Refunds: "Refunds",
+  Registration: "Registration",
+  Resale: "Resale",
+  "Service Status": "Service",
+  Waivers: "Waivers",
+};
+
 export default function AgentDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState(ALL_CATEGORIES);
   const [policies, setPolicies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -27,72 +47,169 @@ export default function AgentDashboard() {
     return unsubscribe;
   }, []);
 
-  const filteredPolicies = policies.filter((policy) => {
-    const q = searchQuery.toLowerCase();
-    const titleMatch = policy.title?.toLowerCase().includes(q);
-    const contentMatch = policy.content?.toLowerCase().includes(q);
-    const categoryMatch = policy.category?.toLowerCase().includes(q);
-    return titleMatch || contentMatch || categoryMatch;
-  });
+  const categories = useMemo(() => {
+    const categoryList = policies.map((policy) => policy.category).filter(Boolean);
+    return [ALL_CATEGORIES, ...Array.from(new Set(categoryList)).sort()];
+  }, [policies]);
+
+  const categoryCounts = useMemo(() => {
+    return policies.reduce(
+      (counts, policy) => {
+        counts[ALL_CATEGORIES] += 1;
+        if (policy.category) {
+          counts[policy.category] = (counts[policy.category] || 0) + 1;
+        }
+        return counts;
+      },
+      { [ALL_CATEGORIES]: 0 }
+    );
+  }, [policies]);
+
+  const filteredPolicies = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+
+    return policies.filter((policy) => {
+      const matchesCategory =
+        activeCategory === ALL_CATEGORIES || policy.category === activeCategory;
+
+      if (!matchesCategory) return false;
+      if (!q) return true;
+
+      const fields = [
+        policy.title,
+        policy.content,
+        policy.category,
+        policy.priority,
+        ...(policy.keywords || []),
+      ];
+
+      return fields.some((field) => String(field || "").toLowerCase().includes(q));
+    });
+  }, [activeCategory, policies, searchQuery]);
 
   const greeting = userProfile?.name || "Agent";
 
   return (
-    <div className="page-bg flex">
+    <div className="page-bg">
       <Sidebar />
 
-      <div className="flex-1 ml-[260px] p-8">
-        <div className="max-w-4xl mx-auto">
-        <header className="mb-8">
-          <h2 className="page-title">Knowledge Base</h2>
-          <p className="page-subtitle">Welcome, {greeting}. Search policies and log actions during your call.</p>
-        </header>
-
-        <ActionSelector />
-
-        <div className="mb-8">
-          <input
-            type="text"
-            placeholder="Search policies by title, content, or category..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="input-field text-base"
-          />
-        </div>
-
-        {loading ? (
-          <p className="text-text-muted text-center py-8">Loading policies...</p>
-        ) : error ? (
-          <div className="card p-8 text-center">
-            <p className="text-accent-coral font-semibold">{error}</p>
-          </div>
-        ) : filteredPolicies.length === 0 ? (
-          <div className="card p-8 text-center">
-            <p className="text-text-muted">
-              {searchQuery ? "No policies found matching your search." : "No policies in the knowledge base yet."}
+      <main className="min-h-screen px-4 pb-8 pt-[142px] sm:px-6 lg:ml-[260px] lg:px-10 lg:py-10">
+        <div className="mx-auto max-w-7xl">
+          <header className="mb-6 glass-card p-5 sm:p-7">
+            <p className="mb-2 text-xs font-extrabold uppercase tracking-[0.18em] text-brand-primary">
+              Agent Workspace
             </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {filteredPolicies.map((policy) => (
-              <article key={policy.id} className="card p-6">
-                <div className="flex items-start justify-between gap-4 mb-2">
-                  <h3 className="font-display text-xl font-semibold text-text-main">
-                    {policy.title || "Untitled Policy"}
-                  </h3>
-                  {policy.category && (
-                    <span className="shrink-0 text-xs font-semibold text-accent-cyan bg-mission-bg border border-mission-border px-2.5 py-1 rounded-full">
-                      {policy.category}
+            <div>
+              <div>
+                <h1 className="font-heading text-3xl font-extrabold tracking-tight text-current sm:text-4xl">
+                  Answer Desk
+                </h1>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-semantic-neutral sm:text-base">
+                  Welcome, {greeting}. Pick the customer intent, then follow one clear
+                  answer path.
+                </p>
+              </div>
+            </div>
+          </header>
+
+          <section className="sticky top-[118px] z-30 mb-5 py-2 lg:top-0">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setActiveCategory(category)}
+                  className={`flex shrink-0 items-center gap-2 rounded-2xl px-4 py-3 text-sm font-extrabold transition-colors ${
+                    activeCategory === category
+                      ? "bg-brand-primary text-white shadow-card"
+                      : "border border-surface-border bg-surface-card text-semantic-neutral shadow-sm hover:border-brand-primary hover:text-brand-primary"
+                  }`}
+                >
+                  <span>{DEPARTMENT_LABELS[category] || category}</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs ${
+                      activeCategory === category
+                        ? "bg-white/20 text-white"
+                        : "bg-surface-panel text-semantic-neutral"
+                    }`}
+                  >
+                    {categoryCounts[category] || 0}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="mb-6 glass-card p-4 sm:p-5">
+            <input
+              type="search"
+              placeholder={`Search ${DEPARTMENT_LABELS[activeCategory] || activeCategory}...`}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="input-field text-base"
+            />
+          </section>
+
+          <ActionSelector />
+
+          {loading ? (
+            <section className="glass-card p-10 text-center text-sm font-semibold text-semantic-neutral">
+              Loading live knowledge workflows...
+            </section>
+          ) : error ? (
+            <section className="rounded-3xl border border-red-100 bg-red-50 p-8 text-center text-sm font-semibold text-semantic-error">
+              {error}
+            </section>
+          ) : filteredPolicies.length === 0 ? (
+            <section className="glass-card p-10 text-center">
+              <p className="font-extrabold text-current">No matching workflow found.</p>
+              <p className="mt-2 text-sm text-semantic-neutral">
+                Try a broader category or search a customer intent like refund, move out,
+                or billing.
+              </p>
+            </section>
+          ) : (
+            <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {filteredPolicies.map((policy) => (
+                <Link
+                  key={policy.id}
+                  to={`/agent/policies/${policy.id}`}
+                  className="group flex min-h-[220px] flex-col justify-between rounded-card border border-surface-border bg-surface-card p-5 text-left shadow-card transition-all hover:-translate-y-0.5 hover:border-brand-primary hover:shadow-xl"
+                >
+                  <div>
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <span className="rounded-full bg-brand-faint px-3 py-1 text-xs font-extrabold text-brand-primary">
+                        {policy.category || "General"}
+                      </span>
+                      {policy.priority && (
+                        <span className="rounded-full bg-surface-panel px-2.5 py-1 text-xs font-bold text-semantic-neutral">
+                          {policy.priority}
+                        </span>
+                      )}
+                    </div>
+
+                    <h2 className="text-lg font-extrabold tracking-tight text-current group-hover:text-brand-primary">
+                      {policy.title || "Untitled Policy"}
+                    </h2>
+                    <p className="mt-3 line-clamp-3 text-sm leading-6 text-semantic-neutral">
+                      {policy.content || "No content available."}
+                    </p>
+                  </div>
+
+                  <div className="mt-5 flex items-center justify-between border-t border-surface-border pt-4">
+                    <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-semantic-neutral">
+                      Open workflow
                     </span>
-                  )}
-                </div>
-                <p className="text-text-muted leading-relaxed">{policy.content || "No content available."}</p>
-              </article>
-            ))}
-          </div>
-        )}
+                    <span className="rounded-full bg-brand-faint px-3 py-1 text-sm font-extrabold text-brand-primary transition-colors group-hover:bg-brand-primary group-hover:text-white">
+                      View
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </section>
+          )}
         </div>
-      </div>
+      </main>
     </div>
   );
 }

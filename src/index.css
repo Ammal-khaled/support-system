@@ -1,91 +1,177 @@
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background-color: theme("colors.surface.bg");
-  color: #1E293B;
-  font-family: "Plus Jakarta Sans", sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
-
 @layer base {
+  :root {
+    --brand-primary: 0 137 191;
+    --brand-light: 24 166 184;
+    --brand-faint: 225 246 249;
+    --semantic-success: 34 197 94;
+    --semantic-warning: 245 158 11;
+    --semantic-error: 239 68 68;
+    --semantic-info: 59 130 246;
+    --semantic-neutral: 100 116 139;
+    --surface-bg: 248 250 252;
+    --surface-card: 255 255 255;
+    --surface-panel: 241 245 249;
+    --surface-border: 226 232 240;
+    --graphite-950: 248 250 252;
+    --graphite-900: 255 255 255;
+    --graphite-800: 241 245 249;
+    --page-text: #1e293b;
+    --muted-text: #64748b;
+    --page-grid-a: rgba(0, 137, 191, 0.055);
+    --page-grid-b: rgba(15, 23, 42, 0.035);
+  }
+
+  .theme-dark {
+    --brand-primary: 24 166 184;
+    --brand-light: 70 190 178;
+    --brand-faint: 24 166 184;
+    --semantic-success: 34 197 94;
+    --semantic-warning: 245 158 11;
+    --semantic-error: 239 68 68;
+    --semantic-info: 59 130 246;
+    --semantic-neutral: 148 163 184;
+    --surface-bg: 15 23 42;
+    --surface-card: 30 41 59;
+    --surface-panel: 17 24 39;
+    --surface-border: 51 65 85;
+    --graphite-950: 15 23 42;
+    --graphite-900: 30 41 59;
+    --graphite-800: 39 52 73;
+    --page-text: #e2e8f0;
+    --muted-text: #94a3b8;
+    --page-grid-a: rgba(148, 163, 184, 0.05);
+    --page-grid-b: rgba(148, 163, 184, 0.045);
+  }
+
   html {
-    background: theme("colors.surface.bg");
-    font-family: "Plus Jakarta Sans", sans-serif;
+    background: rgb(var(--surface-bg));
+    font-family: "Inter", sans-serif;
   }
 
   body {
     margin: 0;
+    color: var(--page-text);
+    font-family: "Inter", sans-serif;
+    background:
+      linear-gradient(90deg, var(--page-grid-a) 1px, transparent 1px),
+      linear-gradient(var(--page-grid-b) 1px, transparent 1px),
+      rgb(var(--surface-bg));
+    background-size: 48px 48px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .theme-dark .text-slate-950,
+  .theme-dark .text-slate-900 {
+    color: var(--page-text);
+  }
+
+  .theme-dark .bg-white,
+  .theme-dark .bg-white\/55,
+  .theme-dark .bg-white\/60,
+  .theme-dark .bg-white\/65,
+  .theme-dark .bg-white\/70,
+  .theme-dark .bg-white\/75,
+  .theme-dark .bg-white\/80,
+  .theme-dark .bg-white\/90,
+  .theme-dark .bg-white\/95 {
+    background-color: rgb(var(--surface-card) / 0.95);
+  }
+
+  .theme-dark .border-white\/70,
+  .theme-dark .border-white\/80 {
+    border-color: rgb(var(--surface-border));
   }
 }
 
 @layer components {
   .page-bg {
-    @apply min-h-screen bg-surface-bg text-slate-900 font-sans;
+    @apply min-h-screen bg-surface-bg font-sans;
+    color: var(--page-text);
   }
 
-  .card {
-    @apply bg-surface-card rounded-2xl shadow-card border border-surface-border;
+  .card,
+  .glass-card {
+    @apply rounded-card border border-surface-border bg-surface-card/95 shadow-card backdrop-blur-none;
+  }
+
+  .glass-panel {
+    @apply rounded-card border border-surface-border bg-surface-panel/85;
   }
 
   .card-header {
-    @apply text-xl font-bold text-slate-900 tracking-tight;
+    @apply font-heading text-xl font-extrabold tracking-tight;
+    color: var(--page-text);
   }
 
   .card-subtext {
-    @apply text-sm text-semantic-neutral mt-1;
+    color: var(--muted-text);
+    @apply text-sm mt-1;
   }
 
   .input-field {
-    @apply w-full p-3 border border-surface-border rounded-xl bg-white
-           focus:ring-2 focus:ring-brand-faint focus:border-brand-primary
-           outline-none font-medium text-slate-900 placeholder:text-slate-400 transition-all;
+    @apply w-full p-3 border border-surface-border bg-graphite-950/60
+           focus:ring-2 focus:ring-brand-primary/40 focus:border-brand-primary
+           outline-none font-semibold placeholder:text-slate-500 transition-all;
+    border-radius: 12px;
+    color: var(--page-text);
   }
 
   .label-field {
-    @apply block text-sm font-semibold text-slate-700 mb-2;
+    @apply block text-[0.78rem] uppercase tracking-[0.16em] font-extrabold mb-2;
+    color: var(--muted-text);
   }
 
   .btn-primary {
-    @apply min-h-[48px] bg-brand-primary text-white font-semibold py-3 px-4 rounded-xl shadow-sm
-           hover:bg-brand-light transition-colors disabled:opacity-60 disabled:cursor-not-allowed;
+    @apply min-h-[48px] bg-brand-primary text-white font-extrabold py-3 px-4 shadow-btn
+           hover:bg-brand-light hover:shadow-btn-hover transition-all disabled:opacity-60 disabled:cursor-not-allowed;
+    border-radius: 10px;
   }
 
   .btn-secondary {
-    @apply px-4 py-2 bg-white border border-surface-border text-slate-700 font-semibold rounded-xl
-           hover:border-brand-primary hover:text-brand-primary hover:bg-brand-faint transition-colors;
+    @apply px-4 py-2 bg-transparent border border-surface-border font-semibold
+           hover:border-brand-primary transition-colors;
+    border-radius: 10px;
+    color: var(--page-text);
   }
 
   .btn-danger {
-    @apply px-4 py-2 bg-semantic-error text-white font-semibold rounded-xl
-           hover:bg-red-600 transition-colors;
+    @apply px-4 py-2 bg-semantic-error text-white font-semibold hover:bg-red-600 transition-colors;
+    border-radius: 10px;
   }
 
   .page-title {
-    @apply text-3xl font-bold text-slate-900 tracking-tight;
+    @apply font-heading text-5xl font-extrabold tracking-tight;
+    color: var(--page-text);
   }
 
   .page-subtitle {
-    @apply text-semantic-neutral mt-2 max-w-2xl leading-relaxed;
+    @apply mt-3 max-w-2xl leading-relaxed;
+    color: var(--muted-text);
   }
 
   .tab-btn {
-    @apply px-4 py-2.5 rounded-xl font-semibold text-sm transition-all;
+    @apply px-4 py-2.5 font-bold text-sm transition-all;
+    border-radius: 10px;
   }
 
   .tab-btn-active {
-    @apply bg-brand-faint text-brand-primary shadow-sm;
+    @apply bg-brand-primary text-white shadow-sm;
   }
 
   .tab-btn-inactive {
-    @apply text-semantic-neutral hover:bg-slate-50 hover:text-slate-900;
+    color: var(--muted-text);
+    @apply hover:bg-brand-faint/20 hover:text-brand-primary;
   }
 
   .metric-value {
-    @apply text-5xl font-bold tracking-tight text-slate-900;
+    @apply font-mono text-5xl font-bold tracking-tight;
+    color: var(--page-text);
   }
 
   .connector-line {

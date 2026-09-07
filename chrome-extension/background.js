@@ -1,4 +1,6 @@
+importScripts("auth.js");
 const FIREBASE_PROJECT_ID = "csr-support-system";
+const DASHBOARD_URL = "http://localhost:3000";
 const FIRESTORE_BASE_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
 const FIRESTORE_COMMIT_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:commit`;
 
@@ -19,7 +21,11 @@ function getStringField(fields, name) {
 
 async function fetchCollection(collectionName) {
   try {
-    const response = await fetch(`${FIRESTORE_BASE_URL}/${collectionName}`);
+    const session = await getAuthSession();
+    const response = await fetch(`${FIRESTORE_BASE_URL}/${collectionName}`, {
+      headers: { Authorization: `Bearer ${session.idToken}` },
+    });
+    if (!response.ok) throw new Error(`Could not load ${collectionName}: ${response.status}`);
     const data = await response.json();
 
     if (!data.documents) return [];
@@ -30,7 +36,7 @@ async function fetchCollection(collectionName) {
     }));
   } catch (error) {
     console.error(`Error fetching ${collectionName}:`, error);
-    return [];
+    throw error;
   }
 }
 
@@ -113,20 +119,23 @@ function findKbFactMismatch(transcript, kbArticles) {
   return null;
 }
 
-function getAgentContext(request) {
+async function getAgentContext() {
+  const session = await getAuthSession();
   return {
-    agentId: request.agentId || "unknown_agent",
-    agentName: request.agentName || "Unknown Agent"
+    agentId: session.uid,
+    agentName: session.name
   };
 }
 
 async function writeFlag({ agentId, agentName, type, matchedPhrase, kbArticleId, transcriptSnippet }) {
   const documentId = generateFirestoreId();
-
-  await fetch(FIRESTORE_COMMIT_URL, {
+  const session = await getAuthSession();
+  if (agentId !== session.uid) throw new Error("Extension account changed. Please retry.");
+  const response = await fetch(FIRESTORE_COMMIT_URL, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.idToken}`
     },
     body: JSON.stringify({
       writes: [
@@ -153,6 +162,38 @@ async function writeFlag({ agentId, agentName, type, matchedPhrase, kbArticleId,
       ]
     })
   });
+  if (!response.ok) throw new Error(`Flag write failed: ${response.status}`);
+  return documentId;
+}
+
+async function createCriticalTicket(flagId, agentContext, matchedPhrase) {
+  const session = await getAuthSession();
+  if (session.uid !== agentContext.agentId) throw new Error("Extension account changed.");
+  const response = await fetch(FIRESTORE_COMMIT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.idToken}` },
+    body: JSON.stringify({ writes: [{
+      currentDocument: { exists: false },
+      update: {
+        name: `projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/tickets/critical_${flagId}`,
+        fields: {
+          title: { stringValue: `Critical phrase: ${matchedPhrase.slice(0, 160)}` },
+          status: { stringValue: "Open" }, priority: { stringValue: "High" },
+          department: { stringValue: "Quality" }, source: { stringValue: "critical_flag" },
+          flagId: { stringValue: flagId },
+          flagRef: { referenceValue: `projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/flags/${flagId}` },
+          createdById: { stringValue: agentContext.agentId },
+          createdByName: { stringValue: agentContext.agentName },
+          description: { stringValue: "Review the linked critical flag and coach the agent." },
+        },
+      },
+      updateTransforms: ["createdAt", "updatedAt"].map((fieldPath) => ({ fieldPath, setToServerValue: "REQUEST_TIME" })),
+    }] }),
+  });
+  if (!response.ok) {
+    const data = await response.json();
+    if (data.error?.status !== "ALREADY_EXISTS") throw new Error(`Ticket write failed: ${response.status}`);
+  }
 }
 
 async function checkCritical(transcript, bannedPhrases, kbArticles, agentContext, sender) {
@@ -166,7 +207,7 @@ async function checkCritical(transcript, bannedPhrases, kbArticles, agentContext
   const matchedPhrase = match.wrongPhrase;
   const transcriptSnippet = extractSnippet(transcript, matchedPhrase);
 
-  await writeFlag({
+  const flagId = await writeFlag({
     ...agentContext,
     type: "critical",
     matchedPhrase,
@@ -179,11 +220,15 @@ async function checkCritical(transcript, bannedPhrases, kbArticles, agentContext
       type: "SHOW_WARNING",
       severity: "critical",
       matchedPhrase,
+      knowledgeBaseUrl: match.kbArticleId
+        ? `${DASHBOARD_URL}/agent/policies/${encodeURIComponent(match.kbArticleId)}`
+        : null,
       message: match.correctPhrase
         ? `Critical policy alert: replace "${matchedPhrase}" with "${match.correctPhrase}".`
         : `Critical policy alert: "${matchedPhrase}" conflicts with the live knowledge base.`
     });
   }
+  await createCriticalTicket(flagId, agentContext, matchedPhrase);
 }
 
 async function logSoftSkill(transcript, bannedPhrases, agentContext) {
@@ -214,20 +259,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
 
-    const agentContext = getAgentContext(request);
-
-    Promise.all([getBannedPhrases(), getKbArticles()])
-      .then(([bannedPhrases, kbArticles]) =>
+    Promise.all([getBannedPhrases(), getKbArticles(), getAgentContext()])
+      .then(([bannedPhrases, kbArticles, agentContext]) =>
         Promise.all([
           checkCritical(transcript, bannedPhrases, kbArticles, agentContext, sender),
           logSoftSkill(transcript, bannedPhrases, agentContext)
         ])
       )
+      .then(() => sendResponse({ status: "complete" }))
       .catch((error) => {
         console.error("Error checking transcript:", error);
+        sendResponse({ status: "error", message: error.message });
       });
-
-    sendResponse({ status: "processing" });
   }
 
   return true;

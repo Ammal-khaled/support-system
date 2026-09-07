@@ -36,7 +36,7 @@ export default function SoftSkillsEvaluator() {
     } catch (err) {
       console.error("Soft-skills evaluation failed:", err);
       setError(
-        "Evaluation failed. Confirm the Gemini API key placeholder has been replaced and the browser can reach the API."
+        "AI coaching is unavailable or has not been enabled yet. Please contact your team lead."
       );
     } finally {
       setSubmitting(false);
@@ -48,14 +48,14 @@ export default function SoftSkillsEvaluator() {
       <div className="flex items-start justify-between gap-6 mb-8">
         <div>
           <p className="label-field">Tier 2 Prototype</p>
-          <h2 className="font-display text-3xl font-semibold text-text-main tracking-tight">
+          <h2 className="font-sans text-3xl font-semibold text-slate-900 tracking-tight">
             Soft-Skills AI Coaching
           </h2>
           <p className="card-subtext max-w-2xl">
             Test post-call transcript review. This writes coaching output to Firestore as a soft-skill flag.
           </p>
         </div>
-        <span className="text-xs uppercase tracking-[0.18em] text-accent-violet border border-accent-violet/40 bg-accent-violet/15 px-3 py-2 rounded-enterprise font-semibold">
+        <span className="text-xs uppercase tracking-[0.18em] text-brand-primary border border-brand-primary/40 bg-brand-primary/15 px-3 py-2 rounded-xl font-semibold">
           AI POST-CALL
         </span>
       </div>
@@ -88,36 +88,37 @@ export default function SoftSkillsEvaluator() {
       </form>
 
       {status && (
-        <div className="mt-6 border border-accent-emerald/30 bg-accent-emerald/15 text-accent-emerald p-4 text-sm font-semibold rounded-enterprise">
+        <div className="mt-6 border border-semantic-success/30 bg-semantic-success/15 text-semantic-success p-4 text-sm font-semibold rounded-xl">
           {status}
         </div>
       )}
 
       {error && (
-        <div className="mt-6 border border-accent-coral/30 bg-accent-coral/15 text-accent-coral p-4 text-sm font-semibold rounded-enterprise">
+        <div className="mt-6 border border-semantic-error/30 bg-semantic-error/15 text-semantic-error p-4 text-sm font-semibold rounded-xl">
           {error}
         </div>
       )}
 
       {result && (
-        <div className="mt-6 border border-mission-border bg-mission-bg p-5 rounded-enterprise">
+        <div className="mt-6 border border-surface-border bg-surface-bg p-5 rounded-xl">
           <div className="flex flex-wrap items-center gap-3 mb-3">
             <span
               className={`text-xs uppercase tracking-[0.16em] px-2.5 py-1 rounded-full font-semibold ${
                 result.isCompliant
-                  ? "bg-accent-emerald/15 text-accent-emerald border border-accent-emerald/30"
-                  : "bg-accent-amber/15 text-accent-amber border border-accent-amber/30"
+                  ? "bg-semantic-success/15 text-semantic-success border border-semantic-success/30"
+                  : "bg-semantic-warning/15 text-semantic-warning border border-semantic-warning/30"
               }`}
             >
               {result.isCompliant ? "Compliant" : "Coaching Needed"}
             </span>
-            <span className="font-mono text-xs uppercase tracking-[0.16em] text-text-muted font-semibold">
+            <span className="font-sans text-xs uppercase tracking-[0.16em] text-semantic-neutral font-semibold">
               {result.severity}
             </span>
           </div>
-          <p className="text-text-muted leading-relaxed">{result.feedback}</p>
+          <p className="text-semantic-neutral leading-relaxed">{result.feedback}</p>
         </div>
       )}
     </section>
   );
 }
+

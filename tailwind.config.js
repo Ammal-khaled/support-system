@@ -4,29 +4,45 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"Plus Jakarta Sans"', "sans-serif"],
+        heading: ['"Plus Jakarta Sans"', "Inter", "sans-serif"],
+        sans: ["Inter", "sans-serif"],
+        mono: ['"IBM Plex Mono"', "monospace"],
       },
       colors: {
         brand: {
-          primary: "#583BFF",
-          light: "#7C4DFF",
-          faint: "#EDE9FE",
+          primary: "rgb(var(--brand-primary) / <alpha-value>)",
+          light: "rgb(var(--brand-light) / <alpha-value>)",
+          faint: "rgb(var(--brand-faint) / <alpha-value>)",
+          purple: "rgb(var(--brand-primary) / <alpha-value>)",
         },
         semantic: {
-          success: "#22C55E",
-          warning: "#F59E0B",
-          error: "#EF4444",
-          neutral: "#64748B",
+          success: "rgb(var(--semantic-success) / <alpha-value>)",
+          warning: "rgb(var(--semantic-warning) / <alpha-value>)",
+          error: "rgb(var(--semantic-error) / <alpha-value>)",
+          info: "rgb(var(--semantic-info) / <alpha-value>)",
+          neutral: "rgb(var(--semantic-neutral) / <alpha-value>)",
         },
         surface: {
-          bg: "#F8FAFC",
-          card: "#FFFFFF",
-          border: "#E2E8F0",
+          bg: "rgb(var(--surface-bg) / <alpha-value>)",
+          card: "rgb(var(--surface-card) / <alpha-value>)",
+          panel: "rgb(var(--surface-panel) / <alpha-value>)",
+          border: "rgb(var(--surface-border) / <alpha-value>)",
+        },
+        graphite: {
+          950: "rgb(var(--graphite-950) / <alpha-value>)",
+          900: "rgb(var(--graphite-900) / <alpha-value>)",
+          800: "rgb(var(--graphite-800) / <alpha-value>)",
         },
       },
+      borderRadius: {
+        card: "18px",
+        btn: "10px",
+        input: "12px",
+      },
       boxShadow: {
-        card:
-          "0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)",
+        card: "0 6px 18px rgba(2, 6, 23, 0.09)",
+        btn: "0 6px 14px rgba(0, 137, 191, 0.14)",
+        "btn-hover": "0 8px 18px rgba(0, 137, 191, 0.18)",
       },
     },
   },

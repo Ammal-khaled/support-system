@@ -35,23 +35,23 @@ export default function AgentActionsFeed() {
       </div>
 
       {loading ? (
-        <p className="text-text-muted">Loading actions...</p>
+        <p className="text-semantic-neutral">Loading actions...</p>
       ) : error ? (
-        <p className="text-accent-coral text-sm font-semibold">{error}</p>
+        <p className="text-semantic-error text-sm font-semibold">{error}</p>
       ) : actions.length === 0 ? (
-        <p className="text-text-muted">No agent actions logged yet.</p>
+        <p className="text-semantic-neutral">No agent actions logged yet.</p>
       ) : (
         <div className="space-y-3">
           {actions.map((action) => (
-            <article key={action.id} className="border border-mission-border rounded-enterprise p-4 bg-mission-bg">
+            <article key={action.id} className="border border-surface-border rounded-xl p-4 bg-surface-bg">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="font-display font-semibold text-text-main">{action.agentName || "Unknown Agent"}</p>
-                  <p className="text-sm text-text-muted mt-1">
-                    Action: <span className="font-semibold text-accent-cyan">{action.actionType}</span>
+                  <p className="font-sans font-semibold text-slate-900">{action.agentName || "Unknown Agent"}</p>
+                  <p className="text-sm text-semantic-neutral mt-1">
+                    Action: <span className="font-semibold text-brand-primary">{action.actionType}</span>
                   </p>
                 </div>
-                <p className="font-mono text-sm text-text-muted text-right shrink-0">
+                <p className="font-sans text-sm text-semantic-neutral text-right shrink-0">
                   {formatTimestamp(action.timestamp)}
                 </p>
               </div>
@@ -62,3 +62,4 @@ export default function AgentActionsFeed() {
     </section>
   );
 }
+

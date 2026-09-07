@@ -3,7 +3,8 @@
   "name": "CSR Support System",
   "version": "1.0.0",
   "description": "Chrome extension companion for the CSR Support System dashboard.",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["https://firestore.googleapis.com/*", "https://identitytoolkit.googleapis.com/*", "https://securetoken.googleapis.com/*"],
   "background": {
     "service_worker": "background.js"
   },
@@ -15,6 +16,7 @@
     }
   ],
   "action": {
+    "default_popup": "popup.html",
     "default_title": "CSR Support System"
   }
 }

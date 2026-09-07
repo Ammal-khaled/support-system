@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
+import { getAuth, createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db, firebaseConfig } from "../firebase";
 import Sidebar from "../components/Sidebar";
@@ -27,17 +27,22 @@ export default function CreateUser() {
       const secondaryAuth = getAuth(secondaryApp);
       const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
       const newUser = userCredential.user;
+      await updateProfile(newUser, { displayName: name });
 
       await setDoc(doc(db, "users", newUser.uid), {
         name,
         email,
         role,
+        mustChangePassword: true,
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
 
       await secondaryAuth.signOut();
 
-      setMessage(`Successfully created account for ${name} (${role.replace("_", " ")})!`);
+      setMessage(
+        `Created ${name}. They must change their temporary password after first login.`
+      );
       setName("");
       setEmail("");
       setPassword("");
@@ -54,21 +59,21 @@ export default function CreateUser() {
     <div className="page-bg flex">
       <Sidebar />
 
-      <div className="flex-1 ml-[260px] p-8">
+      <div className="min-h-screen flex-1 px-4 pb-8 pt-[142px] sm:px-6 lg:ml-[260px] lg:p-8">
         <div className="max-w-2xl mx-auto">
           <header className="mb-8">
             <h1 className="page-title">Team Management</h1>
             <p className="page-subtitle">Generate a new portal account and assign their role.</p>
           </header>
 
-          <div className="card p-8">
+          <div className="glass-card p-5 sm:p-8">
             {message && (
-              <div className="bg-accent-cyan/15 border border-accent-cyan/30 text-accent-cyan p-4 rounded-enterprise mb-6 font-semibold text-sm">
+              <div className="bg-brand-faint/15 border border-brand-primary/30 text-brand-primary p-4 rounded-xl mb-6 font-semibold text-sm">
                 {message}
               </div>
             )}
             {error && (
-              <div className="bg-accent-coral/15 border border-accent-coral/30 text-accent-coral p-4 rounded-enterprise mb-6 font-semibold text-sm">
+              <div className="bg-semantic-error/15 border border-semantic-error/30 text-semantic-error p-4 rounded-xl mb-6 font-semibold text-sm">
                 {error}
               </div>
             )}
@@ -127,3 +132,4 @@ export default function CreateUser() {
     </div>
   );
 }
+

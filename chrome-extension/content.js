@@ -1,7 +1,16 @@
-// Check if the browser supports the Web Speech API
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-function showWarningModal(message) {
+function escapeHtml(value) {
+  return String(value || "").replace(/[&<>'"]/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#39;",
+    '"': "&quot;",
+  }[character]));
+}
+
+function showWarningModal(message, knowledgeBaseUrl) {
   if (document.getElementById("csr-warning-box")) return;
 
   const modal = document.createElement("div");
@@ -9,7 +18,8 @@ function showWarningModal(message) {
   modal.className = "csr-warning-modal";
   modal.innerHTML = `
     <h3 style="color: #dc2626; font-weight: bold; margin-bottom: 8px;">Compliance Alert</h3>
-    <p style="color: #374151; font-size: 14px; margin-bottom: 12px;">${message}</p>
+    <p style="color: #374151; font-size: 14px; margin-bottom: 12px;">${escapeHtml(message)}</p>
+    ${knowledgeBaseUrl ? `<a href="${escapeHtml(knowledgeBaseUrl)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; color: #4f46e5; font-size: 14px; font-weight: bold; margin-bottom: 12px;">Open Knowledge Base</a>` : ""}
     <button id="csr-dismiss-btn" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">
       Acknowledge
     </button>
@@ -26,7 +36,7 @@ chrome.runtime.onMessage.addListener((request) => {
   if (request.type !== "SHOW_WARNING") return;
 
   if (request.severity === "critical") {
-    showWarningModal(request.message);
+    showWarningModal(request.message, request.knowledgeBaseUrl);
     return;
   }
 
@@ -54,7 +64,6 @@ if (SpeechRecognition) {
     if (currentText) {
       console.log("CSR Transcript Captured:", currentText);
 
-      // Send the captured text to the background.js file
       chrome.runtime.sendMessage({
         type: "CHECK_TRANSCRIPT",
         payload: currentText
