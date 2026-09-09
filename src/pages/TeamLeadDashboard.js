@@ -98,7 +98,7 @@ export default function TeamLeadDashboard() {
       activeFlags: activeFlags.length,
       criticalFlags: activeFlags.filter((flag) => flag.type === "critical").length,
       softSkillFlags: activeFlags.filter((flag) => flag.type === "soft_skill").length,
-      supportRequests: actions.length,
+      supportRequests: actions.filter(   (action) => (action.status || "open") !== "resolved" ).length,
       kbArticles: articles.length,
     };
   }, [actions, articles, flags]);
