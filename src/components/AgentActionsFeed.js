@@ -61,7 +61,7 @@ export default function AgentActionsFeed({ externalSearchQuery = "", showSearch 
       action.source,
     ].some((field) => String(field || "").toLowerCase().includes(search));
 
-    return activeProfile && matchesSearch;
+    const isUnresolved = (action.status || "open") !== "resolved";  return activeProfile && isUnresolved && matchesSearch;
   });
 
   const openEditor = (action) => {
