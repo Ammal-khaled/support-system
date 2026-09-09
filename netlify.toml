@@ -2,6 +2,13 @@
   command = "npm run build"
   publish = "build"
 
+
+[[redirects]]
+  from = "/api/ai"
+  to = "https://aquadesk-ai.aquadesk-support.workers.dev"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
