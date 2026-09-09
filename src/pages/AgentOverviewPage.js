@@ -32,6 +32,15 @@ function getDate(row, fields) {
   return null;
 }
 
+function getMostRecentDate(row, fields) {
+  return fields
+    .map((field) => row[field])
+    .filter(Boolean)
+    .map((value) => (value?.toDate ? value.toDate() : new Date(value)))
+    .filter((date) => !Number.isNaN(date.getTime()))
+    .sort((first, second) => second.getTime() - first.getTime())[0] || null;
+}
+
 function getAgentName(row) {
   return row.agentName || row.agentEmail || row.createdByName || "Unknown Agent";
 }
@@ -41,8 +50,8 @@ function formatTimestamp(timestamp) {
   return timestamp.toDate().toLocaleString();
 }
 
-function isInPeriod(row, fields, periodId) {
-  const date = getDate(row, fields);
+function isInPeriod(row, fields, periodId, datePicker = getDate) {
+  const date = datePicker(row, fields);
   if (!date || Number.isNaN(date.getTime())) return false;
 
   const period = PERIODS.find((item) => item.id === periodId) || PERIODS[1];
@@ -95,7 +104,7 @@ function calculateQualityScore(actions, flags) {
   return Math.max(0, Math.min(100, 100 - penalty));
 }
 
-function MetricCard({ label, value, tone = "neutral", helper, onClick, destination }) {
+function MetricCard({ label, value, tone = "neutral", helper, caption, onClick, destination }) {
   const toneStyles = {
     neutral: {
       accent: "bg-semantic-neutral",
@@ -131,6 +140,7 @@ function MetricCard({ label, value, tone = "neutral", helper, onClick, destinati
         </p>
         <div>
           <p className={`font-mono text-3xl font-extrabold leading-none tracking-tight ${toneStyles.value}`}>{value}</p>
+          {caption && <p className="mt-2 text-xs font-semibold leading-4 text-semantic-neutral">{caption}</p>}
           {helper && <p className="mt-2 text-xs font-semibold text-semantic-neutral">{helper}</p>}
         </div>
         {destination && (
@@ -580,7 +590,7 @@ function CoachingNotes({ agentId, reviewerId, reviewerName }) {
 
 export default function AgentOverviewPage() {
   const { agentName: agentNameParam } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const routeAgentId = searchParams.get("agentId");
   const [detailAgentId, setDetailAgentId] = useState(null);
   const { currentUser, role, userProfile } = useAuth();
@@ -593,7 +603,8 @@ export default function AgentOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [period, setPeriod] = useState("week");
-  const [tab, setTab] = useState("Overview");
+  const requestedTab = searchParams.get("tab");
+  const tab = TABS.includes(requestedTab) ? requestedTab : "Overview";
   const [recordQuery, setRecordQuery] = useState("");
   const [selectedMistake, setSelectedMistake] = useState(null);
   const [selectedAgentId, setSelectedAgentId] = useState(ALL_AGENTS);
@@ -609,6 +620,16 @@ export default function AgentOverviewPage() {
 
   const canViewTeam = role === "team_lead" || role === "quality_supervisor";
   const signedInName = userProfile?.name || currentUser?.displayName || currentUser?.email || "Agent";
+
+  const handleTabChange = (nextTab) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextTab === "Overview") {
+      nextParams.delete("tab");
+    } else {
+      nextParams.set("tab", nextTab);
+    }
+    setSearchParams(nextParams);
+  };
 
   useEffect(() => {
     setSelectedAgentId(ALL_AGENTS);
@@ -768,7 +789,7 @@ export default function AgentOverviewPage() {
   const periodActions = scopedActions.filter((action) => isInPeriod(action, ["timestamp"], period));
   const periodFlags = scopedFlags.filter((flag) => isInPeriod(flag, ["timestamp"], period));
   const periodTickets = scopedTickets.filter((ticket) =>
-    isInPeriod(ticket, ["createdAt", "updatedAt"], period)
+    isInPeriod(ticket, ["createdAt", "updatedAt"], period, getMostRecentDate)
   );
 
   const visibleActions =
@@ -946,6 +967,7 @@ export default function AgentOverviewPage() {
           label="Score"
           value={displayActions.length || displayFlags.length ? qualityScore : "New"}
           tone="primary"
+          caption="Score starts at 100 and drops for mistake rate, open flags, and critical flags."
           helper={displayActions.length || displayFlags.length ? "Current period" : "No coaching data yet"}
         />
         <MetricCard label="Support Requests" value={displayActions.length} helper="Raised by you" />
@@ -1093,7 +1115,7 @@ export default function AgentOverviewPage() {
             <button
               key={item}
               type="button"
-              onClick={() => setTab(item)}
+              onClick={() => handleTabChange(item)}
               className={`shrink-0 rounded-2xl px-4 py-3 text-sm font-extrabold transition-colors ${
                 tab === item
                   ? "bg-brand-primary text-white shadow-card"
@@ -1160,11 +1182,18 @@ export default function AgentOverviewPage() {
       </section>
 
       <section className="metric-grid mb-6 grid gap-3">
-        <MetricCard label="Score" value={qualityScore} tone="primary" destination="Overview" onClick={() => setTab("Overview")} />
-        <MetricCard label="Support Requests" value={displayActions.length} destination="Support Requests" onClick={() => setTab("Support Requests")} />
-        <MetricCard label="Tickets" value={displayTickets.length} tone="success" destination="Tickets" onClick={() => setTab("Tickets")} />
-        <MetricCard label="Mistakes" value={displayFlags.length} tone="error" destination="Mistakes" onClick={() => setTab("Mistakes")} />
-        <MetricCard label="Open" value={openFlags.length} tone="warning" destination="Mistakes" onClick={() => setTab("Mistakes")} />
+        <MetricCard
+          label="Score"
+          value={qualityScore}
+          tone="primary"
+          caption="Score starts at 100 and drops for mistake rate, open flags, and critical flags."
+          destination="Overview"
+          onClick={() => handleTabChange("Overview")}
+        />
+        <MetricCard label="Support Requests" value={displayActions.length} destination="Support Requests" onClick={() => handleTabChange("Support Requests")} />
+        <MetricCard label="Tickets" value={displayTickets.length} tone="success" destination="Tickets" onClick={() => handleTabChange("Tickets")} />
+        <MetricCard label="Mistakes" value={displayFlags.length} tone="error" destination="Mistakes" onClick={() => handleTabChange("Mistakes")} />
+        <MetricCard label="Open" value={openFlags.length} tone="warning" destination="Mistakes" onClick={() => handleTabChange("Mistakes")} />
       </section>
 
       {agentNameParam && detailAgentId && (
