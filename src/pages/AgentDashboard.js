@@ -68,23 +68,30 @@ export default function AgentDashboard() {
   const filteredPolicies = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
 
-    return policies.filter((policy) => {
+    return policies
+      .map((policy) => {
       const matchesCategory =
         activeCategory === ALL_CATEGORIES || policy.category === activeCategory;
 
-      if (!matchesCategory) return false;
-      if (!q) return true;
+        if (!matchesCategory) return null;
+        if (!q) return { policy, score: 0 };
 
-      const fields = [
-        policy.title,
-        policy.content,
-        policy.category,
-        policy.priority,
-        ...(policy.keywords || []),
-      ];
+        const keywordText = (policy.keywords || []).join(" ").toLowerCase();
+        const titleText = String(policy.title || "").toLowerCase();
+        const contentText = String(policy.content || "").toLowerCase();
+        const categoryText = String(policy.category || "").toLowerCase();
+        const priorityText = String(policy.priority || "").toLowerCase();
+        const score =
+          (keywordText.includes(q) ? 3 : 0) +
+          (titleText.includes(q) ? 2 : 0) +
+          (contentText.includes(q) ? 1 : 0) +
+          (categoryText.includes(q) || priorityText.includes(q) ? 1 : 0);
 
-      return fields.some((field) => String(field || "").toLowerCase().includes(q));
-    });
+        return score > 0 ? { policy, score } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score || String(a.policy.title || "").localeCompare(String(b.policy.title || "")))
+      .map((item) => item.policy);
   }, [activeCategory, policies, searchQuery]);
 
   const greeting = userProfile?.name || "Agent";

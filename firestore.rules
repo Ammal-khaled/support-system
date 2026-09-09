@@ -36,18 +36,20 @@ service cloud.firestore {
 
     match /banned_phrases/{document} {
       allow read: if signedIn();
-      allow write: if isTeamLead();
+      allow write: if canReview();
     }
 
     match /flags/{document} {
-      allow create: if ownsIncomingAgentRecord();
+      allow create: if canReview() || ownsIncomingAgentRecord();
       allow read: if canReview() || ownsExistingAgentRecord();
       allow update: if canReview();
+      allow delete: if canReview();
     }
 
     match /agent_actions/{document} {
       allow create: if ownsIncomingAgentRecord();
       allow read: if canReview() || ownsExistingAgentRecord();
+      allow update: if canReview();
     }
 
     match /tickets/{document} {
@@ -58,7 +60,7 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isTeamLead());
+      allow read: if signedIn() && (request.auth.uid == uid || canReview());
       allow update: if signedIn()
         && request.auth.uid == uid
         && request.resource.data.diff(resource.data).affectedKeys()
@@ -68,16 +70,22 @@ service cloud.firestore {
 
     match /knowledge_base/{document} {
       allow read: if signedIn();
-      allow write: if isTeamLead();
+      allow write: if canReview();
     }
 
     match /action_types/{document} {
       allow read: if signedIn();
-      allow write: if isTeamLead();
+      allow write: if canReview();
     }
 
     match /agents_coaching_notes/{agentId} {
       allow read, write: if canReview();
+    }
+
+    match /after_call_reports/{document} {
+      allow create: if ownsIncomingAgentRecord();
+      allow read: if canReview() || ownsExistingAgentRecord();
+      allow update: if canReview();
     }
   }
 }

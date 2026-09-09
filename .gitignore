@@ -3,3 +3,5 @@ serviceAccountKey.json
 .env.local
 node_modules/
 /build
+dev-server*.log
+*.zip

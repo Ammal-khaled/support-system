@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import { useAuth } from "../context/AuthContext";
-import { createTicket, subscribeTickets, updateTicket } from "../services/firestore";
+import { createTicket, subscribeTickets, subscribeUsers, updateTicket } from "../services/firestore";
 
 const EMPTY_FORM = {
   customerName: "",
@@ -50,6 +51,8 @@ function priorityTone(priority) {
 
 export default function TicketsPage() {
   const { currentUser, userProfile, role } = useAuth();
+  const [searchParams] = useSearchParams();
+  const highlightedTicketId = searchParams.get("highlight") || "";
   const [tickets, setTickets] = useState([]);
   const [selectedId, setSelectedId] = useState("");
   const [form, setForm] = useState(EMPTY_FORM);
@@ -61,6 +64,7 @@ export default function TicketsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [inactiveUserIds, setInactiveUserIds] = useState(new Set());
 
   const agentName = userProfile?.name || currentUser?.displayName || currentUser?.email || "Agent";
   const canViewTeam = role === "team_lead" || role === "quality_supervisor";
@@ -82,12 +86,28 @@ export default function TicketsPage() {
     return unsubscribe;
   }, [canViewTeam, currentUser?.uid]);
 
+  useEffect(() => {
+    if (!canViewTeam) {
+      setInactiveUserIds(new Set());
+      return undefined;
+    }
+
+    const unsubscribe = subscribeUsers((rows) => {
+      setInactiveUserIds(new Set(rows
+        .filter((user) => user.disabled || user.role === "disabled")
+        .map((user) => user.id)));
+    });
+
+    return unsubscribe;
+  }, [canViewTeam]);
+
   const visibleTickets = useMemo(() => {
     const search = query.trim().toLowerCase();
 
     return tickets.filter((ticket) => {
       const matchesStatus = statusFilter === "All" || ticket.status === statusFilter;
       const matchesOwner = canViewTeam || ticket.createdById === currentUser?.uid;
+      const matchesActiveProfile = !canViewTeam || !ticket.createdById || !inactiveUserIds.has(ticket.createdById);
       const matchesSearch =
         !search ||
         [
@@ -103,11 +123,21 @@ export default function TicketsPage() {
           ticket.agentName,
         ].some((field) => String(field || "").toLowerCase().includes(search));
 
-      return matchesStatus && matchesOwner && matchesSearch;
+      return matchesStatus && matchesOwner && matchesActiveProfile && matchesSearch;
     });
-  }, [canViewTeam, currentUser?.uid, query, statusFilter, tickets]);
+  }, [canViewTeam, currentUser?.uid, inactiveUserIds, query, statusFilter, tickets]);
 
   const selectedTicket = visibleTickets.find((ticket) => ticket.id === selectedId) || null;
+
+  useEffect(() => {
+    if (!highlightedTicketId || loading) return;
+
+    const highlightedTicket = visibleTickets.find((ticket) => ticket.id === highlightedTicketId);
+    if (highlightedTicket) {
+      setSelectedId(highlightedTicket.id);
+      setIsEditorOpen(true);
+    }
+  }, [highlightedTicketId, loading, visibleTickets]);
 
   useEffect(() => {
     if (!selectedTicket) {
@@ -130,7 +160,7 @@ export default function TicketsPage() {
 
   const stats = useMemo(() => {
     const mineOrTeam = canViewTeam
-      ? tickets
+      ? tickets.filter((ticket) => !ticket.createdById || !inactiveUserIds.has(ticket.createdById))
       : tickets.filter((ticket) => ticket.createdById === currentUser?.uid);
 
     return {
@@ -141,7 +171,7 @@ export default function TicketsPage() {
       ).length,
       resolved: mineOrTeam.filter((ticket) => ["Resolved", "Closed"].includes(ticket.status)).length,
     };
-  }, [canViewTeam, currentUser?.uid, tickets]);
+  }, [canViewTeam, currentUser?.uid, inactiveUserIds, tickets]);
 
   const handleFormChange = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -426,6 +456,7 @@ export default function TicketsPage() {
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                   {visibleTickets.map((ticket) => {
                     const isSelected = selectedTicket?.id === ticket.id;
+                    const isHighlighted = highlightedTicketId === ticket.id;
 
                     return (
                       <button
@@ -433,12 +464,17 @@ export default function TicketsPage() {
                         type="button"
                         onClick={() => openTicketEditor(ticket.id)}
                         className={`w-full rounded-card border p-4 text-left transition-all ${
-                          isSelected
+                          isSelected || isHighlighted
                             ? "border-brand-primary bg-brand-faint/25 shadow-[0_14px_30px_rgba(88,59,255,0.14)]"
                             : "border-surface-border bg-surface-panel shadow-[0_8px_20px_rgba(15,23,42,0.06)] hover:border-brand-primary hover:shadow-[0_14px_30px_rgba(15,23,42,0.10)]"
                         }`}
                       >
                         <div className="mb-3 flex items-center justify-between gap-3">
+                          {isHighlighted && (
+                            <span className="rounded-full bg-brand-primary px-2.5 py-1 text-xs font-extrabold text-white">
+                              Highlighted
+                            </span>
+                          )}
                           <span className={`rounded-full px-2.5 py-1 text-xs font-extrabold ${statusTone(ticket.status)}`}>
                             {ticket.status || "Open"}
                           </span>
@@ -482,7 +518,7 @@ export default function TicketsPage() {
                     Created by {selectedTicket.createdByName || "Unknown"} on {formatTimestamp(selectedTicket.createdAt)}
                   </p>
                   <p className="mt-1 text-xs font-semibold text-brand-primary">
-                    {canViewTeam ? "Team edit mode" : "Read-only: team leads and quality supervisors can edit"}
+                    {canViewTeam ? "Team edit mode" : "Read-only: team leads and Quality Control can edit"}
                   </p>
                 </div>
                 <div className="flex gap-2">

@@ -84,6 +84,37 @@ async function seedAgentData(agent) {
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
+  await db.collection("after_call_reports").doc(`${base}_after_call_report`).set({
+    agentId: agent.id,
+    agentName,
+    transcript:
+      "Customer asked about refund eligibility. Agent explained they could not promise approval, confirmed the request would be reviewed, and gave the next expected follow-up step.",
+    summary:
+      "The agent handled a refund conversation and avoided guaranteeing an outcome. The call still needs coaching on warmer ownership language and clearer timeline framing.",
+    overallStatus: "coaching_needed",
+    severity: "soft_skill",
+    softSkills: JSON.stringify({
+      status: "coaching_needed",
+      findings: ["The agent gave the correct boundary but could sound more reassuring."],
+      feedback: "Use ownership wording such as: I cannot promise approval, but I will make sure the request is reviewed and explain the next step.",
+    }),
+    bannedPhrases: JSON.stringify([
+      {
+        phrase: "I cannot promise approval",
+        severity: "soft_skill",
+        replacement: "I cannot promise approval, but I will do my best to help with the next step.",
+      },
+    ]),
+    incorrectInformation: JSON.stringify([]),
+    recommendations: JSON.stringify([
+      "Coach the agent to combine policy boundaries with empathy.",
+      "Confirm the expected follow-up timeline before ending the call.",
+    ]),
+    status: "open",
+    source: "demo_seed",
+    createdAt: atDaysAgo(0, 15),
+  });
+
   return agentName;
 }
 
@@ -100,7 +131,7 @@ async function seedDemoData() {
   }
 
   console.log(`Demo activity seeded for ${names.length} agent(s): ${names.join(", ")}`);
-  console.log("Created/updated labeled demo actions, flags, ticket records, and coaching notes.");
+  console.log("Created/updated labeled demo actions, flags, ticket records, after-call reports, and coaching notes.");
 }
 
 seedDemoData()

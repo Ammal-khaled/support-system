@@ -28,6 +28,15 @@ function mapSnapshot(snapshot) {
   return snapshot.docs.map((itemDoc) => ({ id: itemDoc.id, ...itemDoc.data() }));
 }
 
+function parseJsonField(value, fallback) {
+  if (typeof value !== "string") return fallback;
+  try {
+    return JSON.parse(value);
+  } catch (_error) {
+    return fallback;
+  }
+}
+
 function subscribeCollection(collectionName, callback, onError, sorter) {
   return onSnapshot(
     collection(db, collectionName),
@@ -185,6 +194,21 @@ export const deleteBannedPhrase = async (id) => {
   }
 };
 
+export const subscribeUsers = (callback, onError) =>
+  subscribeCollection(
+    "users",
+    callback,
+    onError,
+    (rows) => sortByText(rows, ["name", "email"])
+  );
+
+export const updateUserProfile = async (id, updates) => {
+  await updateDoc(doc(db, "users", id), {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  });
+};
+
 export function getActionTypeName(actionType) {
   return actionType.name || actionType.label || actionType.actionType || actionType.value || "";
 }
@@ -259,11 +283,31 @@ export const subscribeFlags = (callback, onError, agentId) => {
   );
 };
 
+export const getFlags = () =>
+  fetchCollection("flags", (rows) =>
+    [...rows].sort((a, b) => {
+      const aTime = a.timestamp?.toMillis?.() || 0;
+      const bTime = b.timestamp?.toMillis?.() || 0;
+      return bTime - aTime;
+    })
+  );
+
 export const markFlagReviewed = async (id) => {
   await updateDoc(doc(db, "flags", id), {
     reviewed: true,
     reviewedAt: serverTimestamp(),
   });
+};
+
+export const updateFlagReview = async (id, updates) => {
+  await updateDoc(doc(db, "flags", id), {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  });
+};
+
+export const deleteFlag = async (id) => {
+  await deleteDoc(doc(db, "flags", id));
 };
 
 export const addSoftSkillFlag = async ({
@@ -302,6 +346,27 @@ export const subscribeAgentActions = (callback, onError, agentId) => {
   );
 };
 
+export const subscribeAfterCallReports = (callback, onError, agentId) => {
+  const reportsQuery = query(collection(db, "after_call_reports"),
+    ...(agentId ? [where("agentId", "==", agentId)] : []),
+    orderBy("createdAt", "desc"), ...(agentId ? [] : [limit(50)]));
+
+  return onSnapshot(
+    reportsQuery,
+    (snapshot) => callback(mapSnapshot(snapshot).map((report) => ({
+      ...report,
+      softSkills: parseJsonField(report.softSkills, {}),
+      bannedPhrases: parseJsonField(report.bannedPhrases, []),
+      incorrectInformation: parseJsonField(report.incorrectInformation, []),
+      recommendations: parseJsonField(report.recommendations, []),
+    }))),
+    (error) => {
+      console.error("Error listening to after-call reports:", error);
+      if (onError) onError(error);
+    }
+  );
+};
+
 export const getAgentFlagsByDateRange = async (agentId, startDate, endDate) => {
   const snapshot = await getDocs(query(
     collection(db, "flags"),
@@ -324,13 +389,22 @@ export const getAgentActionsByDateRange = async (agentId, startDate, endDate) =>
   return mapSnapshot(snapshot);
 };
 
-export const logAgentAction = async ({ agentId, agentName, actionType, source }) => {
+export const logAgentAction = async ({ agentId, agentName, actionType, note, source }) => {
   await addDoc(collection(db, "agent_actions"), {
     agentId,
     agentName,
     actionType,
+    note: note || "",
+    status: "open",
     source: source || "configured_quick_action",
     timestamp: serverTimestamp(),
+  });
+};
+
+export const updateAgentAction = async (id, updates) => {
+  await updateDoc(doc(db, "agent_actions", id), {
+    ...updates,
+    updatedAt: serverTimestamp(),
   });
 };
 
@@ -416,9 +490,11 @@ export const subscribeAgentUsers = (callback, onError) => {
   return onSnapshot(
     agentsQuery,
     (snapshot) => callback(
-      mapSnapshot(snapshot).sort((a, b) =>
-        String(a.name || a.email || "").localeCompare(String(b.name || b.email || ""))
-      )
+      mapSnapshot(snapshot)
+        .filter((agent) => !agent.disabled && agent.role !== "disabled")
+        .sort((a, b) =>
+          String(a.name || a.email || "").localeCompare(String(b.name || b.email || ""))
+        )
     ),
     (error) => {
       console.error("Error listening to agent users:", error);

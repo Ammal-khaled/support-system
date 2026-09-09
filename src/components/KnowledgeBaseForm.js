@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { addPolicy, deletePolicy, subscribePolicies, updatePolicy } from "../services/firestore";
 
 const EMPTY_ROW = [""];
@@ -70,6 +70,7 @@ function ListField({ label, description, items, onChange, addLabel, multiline = 
 }
 
 export default function KnowledgeBaseForm() {
+  const formCardRef = useRef(null);
   const [policies, setPolicies] = useState([]);
   const [selectedPolicy, setSelectedPolicy] = useState(null);
   const [formTab, setFormTab] = useState("Basics");
@@ -83,6 +84,7 @@ export default function KnowledgeBaseForm() {
   const [sourceFiles, setSourceFiles] = useState(EMPTY_ROW);
   const [keywords, setKeywords] = useState(EMPTY_ROW);
   const [asset, setAsset] = useState("");
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -118,7 +120,9 @@ export default function KnowledgeBaseForm() {
     setError("");
     setStatus("");
     if (process.env.NODE_ENV !== "test") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.setTimeout(() => {
+        formCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 0);
     }
   };
 
@@ -189,9 +193,26 @@ export default function KnowledgeBaseForm() {
     }
   };
 
+  const visiblePolicies = policies.filter((policy) => {
+    const search = query.trim().toLowerCase();
+    if (!search) return true;
+    return [
+      policy.id,
+      policy.title,
+      policy.content,
+      policy.summary,
+      policy.category,
+      policy.priority,
+      ...(policy.customerQuestions || []),
+      ...(policy.agentSteps || []),
+      ...(policy.sourceFiles || []),
+      ...(policy.keywords || []),
+    ].some((field) => String(field || "").toLowerCase().includes(search));
+  });
+
   return (
     <div className="space-y-6">
-      <div className="glass-card p-5 sm:p-8">
+      <div ref={formCardRef} className="glass-card scroll-mt-36 p-5 sm:p-8 lg:scroll-mt-8">
         <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h2 className="text-xl font-extrabold text-slate-950">
@@ -201,16 +222,16 @@ export default function KnowledgeBaseForm() {
               Build the searchable article and the structured call workflow in one place.
             </p>
           </div>
-          <div className="flex gap-1 overflow-x-auto rounded-2xl bg-white/65 p-1">
+          <div className="admin-tab-shell">
             {FORM_TABS.map((tab) => (
               <button
                 key={tab}
                 type="button"
                 onClick={() => setFormTab(tab)}
-                className={`shrink-0 rounded-xl px-4 py-2 text-sm font-extrabold transition-colors ${
+                className={`admin-tab px-4 py-2 ${
                   formTab === tab
-                    ? "bg-brand-primary text-white shadow-sm"
-                    : "text-semantic-neutral hover:bg-white hover:text-slate-950"
+                    ? "admin-tab-active"
+                    : "admin-tab-inactive"
                 }`}
               >
                 {tab}
@@ -273,7 +294,7 @@ export default function KnowledgeBaseForm() {
             </div>
           )}
 
-          <div className="mt-7 flex flex-wrap justify-end gap-2 border-t border-white/70 pt-5">
+          <div className="mt-7 flex flex-wrap justify-end gap-2 border-t border-surface-border pt-5">
             {selectedPolicy && (
               <button type="button" onClick={handleDeletePolicy} className="btn-danger">Delete</button>
             )}
@@ -287,20 +308,27 @@ export default function KnowledgeBaseForm() {
 
       <div className="glass-card p-5 sm:p-8">
         <h3 className="mb-4 text-xl font-extrabold text-slate-950">Existing Policies ({policies.length})</h3>
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          className="input-field mb-4"
+          placeholder="Search policies by title, category, keyword, content, or ID..."
+        />
         {loading ? (
           <p className="text-semantic-neutral">Loading policies...</p>
-        ) : policies.length === 0 ? (
-          <p className="text-semantic-neutral">No policies in the knowledge base yet.</p>
+        ) : visiblePolicies.length === 0 ? (
+          <p className="text-semantic-neutral">No policies match this search.</p>
         ) : (
           <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {policies.map((policy) => (
+            {visiblePolicies.map((policy) => (
               <li key={policy.id}>
                 <button
                   type="button"
                   onClick={() => handleSelectPolicy(policy)}
-                  className={`h-full w-full rounded-2xl border p-4 text-left transition-all ${
+                  className={`h-full w-full rounded-card border p-4 text-left transition-all ${
                     selectedPolicy?.id === policy.id
-                      ? "border-brand-primary bg-brand-faint/40"
+                      ? "border-brand-primary bg-brand-faint/20"
                       : "border-surface-border bg-surface-card hover:border-brand-primary hover:bg-surface-panel"
                   }`}
                 >

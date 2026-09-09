@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import { useAuth } from "../context/AuthContext";
@@ -14,6 +14,7 @@ import {
   subscribeCoachingNote,
   subscribeFlags,
   subscribeTickets,
+  subscribeUsers,
 } from "../services/firestore";
 
 const ALL_AGENTS = "All Agents";
@@ -22,7 +23,7 @@ const PERIODS = [
   { id: "week", label: "This Week", days: 7 },
   { id: "month", label: "This Month", days: 30 },
 ];
-const TABS = ["Overview", "Mistakes", "Agents", "Tickets"];
+const TABS = ["Overview", "Mistakes", "Support Requests", "Agents", "Tickets"];
 
 function getDate(row, fields) {
   const value = fields.map((field) => row[field]).find(Boolean);
@@ -47,7 +48,11 @@ function isInPeriod(row, fields, periodId) {
   const period = PERIODS.find((item) => item.id === periodId) || PERIODS[1];
   const start = new Date();
   start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - (period.days - 1));
+  if (periodId === "month") {
+    start.setDate(1);
+  } else {
+    start.setDate(start.getDate() - (period.days - 1));
+  }
   return date >= start;
 }
 
@@ -61,6 +66,11 @@ function countBy(rows, getKey) {
   return Object.entries(counts)
     .map(([label, value]) => ({ label, value }))
     .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+}
+
+function recordMatchesSearch(row, fields, search) {
+  if (!search) return true;
+  return fields.some((field) => String(row[field] || "").toLowerCase().includes(search));
 }
 
 function toDateInputValue(date) {
@@ -85,7 +95,7 @@ function calculateQualityScore(actions, flags) {
   return Math.max(0, Math.min(100, 100 - penalty));
 }
 
-function MetricCard({ label, value, tone = "neutral", helper }) {
+function MetricCard({ label, value, tone = "neutral", helper, onClick, destination }) {
   const toneStyles = {
     neutral: {
       accent: "bg-semantic-neutral",
@@ -111,17 +121,42 @@ function MetricCard({ label, value, tone = "neutral", helper }) {
     accent: "bg-semantic-neutral",
     value: tone,
   };
+  const clickable = typeof onClick === "function";
+  const content = (
+    <>
+      <div className={`absolute inset-x-0 top-0 h-1.5 ${toneStyles.accent}`} />
+      <div className="flex h-full min-h-[184px] flex-col justify-between p-5 pt-7">
+        <p className="min-h-[32px] text-xs font-extrabold uppercase leading-4 tracking-[0.14em] text-semantic-neutral">
+          {label}
+        </p>
+        <div>
+          <p className={`font-mono text-3xl font-extrabold leading-none tracking-tight ${toneStyles.value}`}>{value}</p>
+          {helper && <p className="mt-2 text-xs font-semibold text-semantic-neutral">{helper}</p>}
+        </div>
+        {destination && (
+          <p className="min-h-[28px] text-[0.65rem] font-extrabold uppercase leading-4 tracking-[0.14em] text-semantic-neutral">
+            Open {destination}
+          </p>
+        )}
+      </div>
+    </>
+  );
+
+  if (clickable) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="glass-card relative min-h-[184px] overflow-hidden p-0 text-left transition-colors hover:border-brand-primary hover:bg-surface-panel focus:outline-none focus:ring-2 focus:ring-brand-primary/40"
+      >
+        {content}
+      </button>
+    );
+  }
 
   return (
-    <div className="glass-card min-h-[112px] overflow-hidden p-0">
-      <div className={`h-1.5 w-full ${toneStyles.accent}`} />
-      <div className="p-4">
-      <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-semantic-neutral">
-        {label}
-      </p>
-      <p className={`mt-2 font-mono text-3xl font-extrabold tracking-tight ${toneStyles.value}`}>{value}</p>
-      {helper && <p className="mt-2 text-xs font-semibold text-semantic-neutral">{helper}</p>}
-      </div>
+    <div className="glass-card relative min-h-[184px] overflow-hidden p-0">
+      {content}
     </div>
   );
 }
@@ -169,13 +204,158 @@ function TrendBars({ title, subtitle, rows, emptyText = "No data yet." }) {
   );
 }
 
+function RankedTiles({ title, subtitle, rows, emptyText = "No data yet.", tone = "primary" }) {
+  const toneClasses = {
+    primary: "border-brand-primary/40 bg-brand-primary/10 text-brand-primary",
+    success: "border-semantic-success/40 bg-semantic-success/10 text-semantic-success",
+    warning: "border-semantic-warning/40 bg-semantic-warning/10 text-semantic-warning",
+    error: "border-semantic-error/40 bg-semantic-error/10 text-semantic-error",
+  }[tone] || "border-brand-primary/40 bg-brand-primary/10 text-brand-primary";
+
+  return (
+    <section className="glass-card p-5 sm:p-6">
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold text-slate-950">{title}</h2>
+        {subtitle && <p className="mt-1 text-sm text-semantic-neutral">{subtitle}</p>}
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="rounded-2xl bg-white/60 p-5 text-sm font-semibold text-semantic-neutral">
+          {emptyText}
+        </p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {rows.slice(0, 4).map((row, index) => (
+            <div key={row.label} className="rounded-2xl border border-surface-border bg-surface-card p-4">
+              <div className="flex items-start justify-between gap-3">
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-sm font-extrabold ${toneClasses}`}>
+                  {index + 1}
+                </span>
+                <p className="font-mono text-2xl font-extrabold text-slate-950">{row.value}</p>
+              </div>
+              <p className="mt-4 text-sm font-extrabold leading-5 text-slate-900">{row.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function StatusMix({ title, subtitle, rows, emptyText = "No data yet." }) {
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
+  const colors = ["#0089BF", "#22C55E", "#F59E0B", "#EF4444", "#64748B"];
+  let offset = 25;
+  const segments = rows.slice(0, 5).map((row, index) => {
+    const length = total ? (row.value / total) * 75 : 0;
+    const segment = {
+      ...row,
+      color: colors[index % colors.length],
+      dasharray: `${length} ${100 - length}`,
+      dashoffset: offset,
+    };
+    offset -= length;
+    return segment;
+  });
+
+  return (
+    <section className="glass-card p-5 sm:p-6">
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold text-slate-950">{title}</h2>
+        {subtitle && <p className="mt-1 text-sm text-semantic-neutral">{subtitle}</p>}
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="rounded-2xl bg-white/60 p-5 text-sm font-semibold text-semantic-neutral">
+          {emptyText}
+        </p>
+      ) : (
+        <div className="grid gap-5 sm:grid-cols-[170px_1fr] sm:items-center">
+          <div className="relative mx-auto h-40 w-40">
+            <svg viewBox="0 0 42 42" className="h-full w-full rotate-[-90deg]" role="img" aria-label={`${title} distribution`}>
+              <circle cx="21" cy="21" r="15.915" fill="none" stroke="#E2E8F0" strokeWidth="5" />
+              {segments.map((row) => (
+                <circle
+                  key={row.label}
+                  cx="21"
+                  cy="21"
+                  r="15.915"
+                  fill="none"
+                  stroke={row.color}
+                  strokeWidth="5"
+                  strokeDasharray={row.dasharray}
+                  strokeDashoffset={row.dashoffset}
+                />
+              ))}
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <p className="font-mono text-3xl font-extrabold text-slate-950">{total}</p>
+              <p className="text-xs font-bold uppercase text-semantic-neutral">tickets</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {segments.map((row) => (
+              <div key={row.label} className="flex items-center justify-between gap-3 rounded-xl border border-surface-border bg-surface-card px-3 py-2">
+                <span className="flex min-w-0 items-center gap-2 text-sm font-extrabold text-slate-900">
+                  <i className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: row.color }} />
+                  <span className="truncate">{row.label}</span>
+                </span>
+                <span className="font-mono text-sm font-extrabold text-slate-950">{row.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MistakeSummary({ title, subtitle, rows, emptyText = "No data yet." }) {
+  return (
+    <section className="glass-card p-5 sm:p-6">
+      <div className="mb-4">
+        <h2 className="text-lg font-extrabold text-slate-950">{title}</h2>
+        {subtitle && <p className="mt-1 text-sm text-semantic-neutral">{subtitle}</p>}
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="rounded-2xl bg-white/60 p-5 text-sm font-semibold text-semantic-neutral">
+          {emptyText}
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {rows.slice(0, 5).map((row, index) => (
+            <div key={row.label} className="rounded-2xl border border-surface-border bg-surface-card p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-semantic-error">
+                    Review theme {index + 1}
+                  </p>
+                  <p className="mt-1 truncate text-sm font-extrabold text-slate-950">{row.label}</p>
+                </div>
+                <span className="rounded-xl bg-red-50 px-3 py-2 font-mono text-sm font-extrabold text-semantic-error">
+                  {row.value}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function getActivityBuckets(actions, flags, tickets, periodId) {
   const period = PERIODS.find((item) => item.id === periodId) || PERIODS[1];
   const end = new Date();
   end.setHours(23, 59, 59, 999);
   const start = new Date(end);
   start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - (period.days - 1));
+  if (periodId === "month") {
+    start.setDate(1);
+  } else {
+    start.setDate(start.getDate() - (period.days - 1));
+  }
   const countRows = (rows, fields, from, to) => rows.filter((row) => {
     const rowDate = getDate(row, fields);
     return rowDate && rowDate >= from && rowDate < to;
@@ -189,7 +369,29 @@ function getActivityBuckets(actions, flags, tickets, periodId) {
       to.setHours(hour + 1);
       return { label: `${String(hour).padStart(2, "0")}:00`, actions: countRows(actions, ["timestamp"], from, to), flags: countRows(flags, ["timestamp"], from, to), tickets: countRows(tickets, ["createdAt", "updatedAt"], from, to) };
     });
-    return buckets.filter((row) => row.actions + row.flags + row.tickets > 0);
+    return buckets;
+  }
+
+  if (periodId === "month") {
+    const month = start.getMonth();
+    const year = start.getFullYear();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const ranges = [
+      [1, 8],
+      [8, 15],
+      [15, 22],
+      [22, daysInMonth + 1],
+    ];
+    return ranges.map(([fromDay, toDay]) => {
+      const from = new Date(year, month, fromDay);
+      const to = new Date(year, month, toDay);
+      return {
+        label: `${fromDay}-${toDay - 1}`,
+        actions: countRows(actions, ["timestamp"], from, to),
+        flags: countRows(flags, ["timestamp"], from, to),
+        tickets: countRows(tickets, ["createdAt", "updatedAt"], from, to),
+      };
+    });
   }
 
   const buckets = Array.from({ length: period.days }, (_, index) => {
@@ -206,7 +408,7 @@ function getActivityBuckets(actions, flags, tickets, periodId) {
       tickets: countRows(tickets, ["createdAt", "updatedAt"], from, to),
     };
   });
-  return buckets.filter((row) => row.actions + row.flags + row.tickets > 0);
+  return buckets;
 }
 
 function ActivityDashboard({ rows, period }) {
@@ -215,54 +417,101 @@ function ActivityDashboard({ rows, period }) {
     actions: sum.actions + row.actions, flags: sum.flags + row.flags, tickets: sum.tickets + row.tickets,
   }), { actions: 0, flags: 0, tickets: 0 });
   const max = Math.max(...safeRows.map((row) => row.actions + row.flags + row.tickets), 1);
-  const linePoints = safeRows.map((row, index) => `${safeRows.length === 1 ? 300 : (index / (safeRows.length - 1)) * 560 + 20},${190 - ((row.actions + row.flags + row.tickets) / max) * 160}`).join(" ");
-  const ringTotal = Math.max(totals.actions + totals.flags + totals.tickets, 1);
-  const ringItems = [["Actions", totals.actions, "#0089BF"], ["Flags", totals.flags, "#EF4444"], ["Tickets", totals.tickets, "#3B82F6"]];
+  const mid = Math.ceil(max / 2);
+  const hasActivity = totals.actions + totals.flags + totals.tickets > 0;
+  const ringItems = [["Support Requests", totals.actions, "#0089BF"], ["Flags", totals.flags, "#EF4444"], ["Tickets", totals.tickets, "#3B82F6"]];
+  const periodLabel = period === "day" ? "today, by hour" : period === "month" ? "this month, by week segment" : "this week, by day";
+  const chartLeft = 54;
+  const chartRight = 610;
+  const chartTop = 30;
+  const chartBottom = 190;
+  const chartHeight = chartBottom - chartTop;
+  const groupWidth = (chartRight - chartLeft) / safeRows.length;
+  const series = [["actions", "#0089BF"], ["flags", "#EF4444"], ["tickets", "#3B82F6"]];
 
   return (
     <section className="glass-card p-5 sm:p-6 lg:col-span-2">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-xl font-extrabold text-slate-950">{period === "day" ? "Today" : period === "month" ? "Active days this month" : "Activity by day this week"}</h2>
-          <p className="mt-1 text-sm text-semantic-neutral">Only periods with recorded activity are shown.</p>
+          <h2 className="text-xl font-extrabold text-slate-950">Activity Timeline</h2>
+          <p className="mt-1 text-sm text-semantic-neutral">
+            Current view: {periodLabel}. Each bucket totals support requests, flags, and tickets.
+          </p>
         </div>
         <div className="flex flex-wrap gap-3 text-xs font-bold text-semantic-neutral">
           {ringItems.map(([label, , color]) => <span key={label} className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />{label}</span>)}
         </div>
       </div>
 
-      <div className="mt-6 grid gap-5 lg:grid-cols-[1.45fr_0.8fr]">
-        <div className="rounded-2xl border border-surface-border bg-slate-50/70 p-4">
-          <div className="flex h-48 items-end gap-2 overflow-x-auto" role="img" aria-label="Activity bar chart">
-            {safeRows.map((row) => <div key={row.label} className="flex min-w-[42px] flex-1 flex-col items-center justify-end gap-2">
-              <div className="flex h-40 w-full items-end justify-center gap-1">
-                <i title={`${row.actions} actions`} className="w-2.5 rounded-t bg-brand-primary" style={{ height: `${Math.max(row.actions ? 8 : 0, (row.actions / max) * 100)}%` }} />
-                <i title={`${row.flags} flags`} className="w-2.5 rounded-t bg-semantic-error" style={{ height: `${Math.max(row.flags ? 8 : 0, (row.flags / max) * 100)}%` }} />
-                <i title={`${row.tickets} tickets`} className="w-2.5 rounded-t bg-semantic-info" style={{ height: `${Math.max(row.tickets ? 8 : 0, (row.tickets / max) * 100)}%` }} />
-              </div>
-              <span className="text-[0.65rem] font-extrabold text-slate-500">{row.label}</span>
-            </div>)}
+      <div className="mt-6 rounded-2xl border border-surface-border bg-slate-50/70 p-4">
+        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-semantic-neutral">
+              Total Records Trend
+            </p>
+            <p className="mt-1 text-xs font-semibold text-semantic-neutral">
+              Y-axis: records per bucket. X-axis: {period === "day" ? "hours" : period === "month" ? "1–7, 8–14, 15–21, 22–month end" : "days"}.
+            </p>
           </div>
+          <p className="font-mono text-xs font-extrabold text-brand-primary">
+            Max bucket: {max}
+          </p>
         </div>
+        {!hasActivity ? (
+          <p className="rounded-card border border-surface-border bg-surface-card p-5 text-sm font-semibold text-semantic-neutral">
+            No activity has been recorded for this current filter yet.
+          </p>
+        ) : (
+        <svg viewBox="0 0 640 250" className="h-56 w-full" preserveAspectRatio="none" role="img" aria-label="Bar chart of support requests, flags, and tickets grouped by time bucket">
+          {[30, 110, 190].map((y) => (
+            <line key={y} x1="54" y1={y} x2="610" y2={y} stroke="#CBD5E1" strokeDasharray={y === 190 ? "" : "5 7"} />
+          ))}
+          <line x1="54" y1="20" x2="54" y2="190" stroke="#94A3B8" />
+          <line x1="54" y1="190" x2="610" y2="190" stroke="#94A3B8" />
+          <text x="12" y="34" className="fill-slate-500 text-[13px] font-bold">{max}</text>
+          <text x="12" y="114" className="fill-slate-500 text-[13px] font-bold">{mid}</text>
+          <text x="12" y="194" className="fill-slate-500 text-[13px] font-bold">0</text>
+          {safeRows.map((row, index) => {
+            const barWidth = Math.min(24, Math.max(8, (groupWidth - 20) / 3));
+            const barGap = 4;
+            const totalBarsWidth = (barWidth * 3) + (barGap * 2);
+            const groupStart = chartLeft + (index * groupWidth) + ((groupWidth - totalBarsWidth) / 2);
+            const showLabel = period !== "day" || index % 4 === 0 || index === safeRows.length - 1;
 
-        <div className="flex items-center gap-4 rounded-2xl border border-surface-border bg-slate-50/70 p-4">
-          <svg viewBox="0 0 120 120" className="h-32 w-32 shrink-0 -rotate-90" role="img" aria-label="Activity mix ring chart">
-            <circle cx="60" cy="60" r="46" fill="none" stroke="#E2E8F0" strokeWidth="12" />
-            {ringItems.map(([label, value, color], index) => <circle key={label} cx="60" cy="60" r="46" fill="none" stroke={color} strokeWidth="12" strokeDasharray={`${(value / ringTotal) * 289} 289`} strokeDashoffset={-ringItems.slice(0, index).reduce((sum, item) => sum + (item[1] / ringTotal) * 289, 0)} />)}
-          </svg>
-          <div className="space-y-2 text-sm">
-            {ringItems.map(([label, value, color]) => <div key={label} className="flex items-center justify-between gap-6"><span className="flex items-center gap-2 text-semantic-neutral"><i className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />{label}</span><strong className="font-mono text-slate-950">{value}</strong></div>)}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-5 rounded-2xl border border-surface-border bg-slate-50/70 p-4">
-        <p className="mb-2 text-xs font-extrabold uppercase tracking-[0.14em] text-semantic-neutral">Activity line</p>
-        <svg viewBox="0 0 600 220" className="h-40 w-full" preserveAspectRatio="none" role="img" aria-label="Activity line chart">
-          <line x1="20" y1="190" x2="580" y2="190" stroke="#CBD5E1" />
-          <polyline points={linePoints} fill="none" stroke="#0089BF" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-          {safeRows.map((row, index) => <circle key={`${row.label}-point`} cx={safeRows.length === 1 ? 300 : (index / (safeRows.length - 1)) * 560 + 20} cy={190 - ((row.actions + row.flags + row.tickets) / max) * 160} r="5" fill="#0089BF" />)}
+            return (
+              <g key={`${row.label}-bucket`}>
+                {series.map(([key, color], seriesIndex) => {
+                  const value = row[key];
+                  const height = (value / max) * chartHeight;
+                  const x = groupStart + (seriesIndex * (barWidth + barGap));
+                  const y = chartBottom - height;
+                  return (
+                    <rect key={key} x={x} y={y} width={barWidth} height={Math.max(height, value ? 2 : 0)} rx="2" fill={color}>
+                      <title>{`${row.label}: ${value} ${key === "actions" ? "support requests" : key}`}</title>
+                    </rect>
+                  );
+                })}
+                {showLabel && (
+                  <text x={chartLeft + (index * groupWidth) + (groupWidth / 2)} y="226" textAnchor="middle" className="fill-slate-500 text-[12px] font-bold">
+                    {row.label}
+                  </text>
+                )}
+              </g>
+            );
+          })}
         </svg>
+        )}
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {ringItems.map(([label, value, color]) => (
+          <div key={label} className="rounded-2xl border border-surface-border bg-surface-card px-4 py-3">
+            <p className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.12em] text-semantic-neutral">
+              <i className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+              {label}
+            </p>
+            <p className="mt-2 font-mono text-2xl font-extrabold text-slate-950">{value}</p>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -304,7 +553,7 @@ function CoachingNotes({ agentId, reviewerId, reviewerName }) {
     <section className="glass-card p-5 sm:p-6">
       <h2 className="text-xl font-extrabold text-slate-950">Coaching Notes</h2>
       <p className="mt-1 text-sm leading-6 text-semantic-neutral">
-        Keep a shared coaching note for this agent. Only team leads and quality supervisors can access it.
+        Keep a shared coaching note for this agent. Only team leads and Quality Control can access it.
       </p>
       <textarea
         value={note}
@@ -339,11 +588,14 @@ export default function AgentOverviewPage() {
   const [flags, setFlags] = useState([]);
   const [tickets, setTickets] = useState([]);
   const [directoryAgents, setDirectoryAgents] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [detailUser, setDetailUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [period, setPeriod] = useState("week");
   const [tab, setTab] = useState("Overview");
+  const [recordQuery, setRecordQuery] = useState("");
+  const [selectedMistake, setSelectedMistake] = useState(null);
   const [selectedAgentId, setSelectedAgentId] = useState(ALL_AGENTS);
   const [reviewingId, setReviewingId] = useState("");
   const [exportStart, setExportStart] = useState(() => {
@@ -363,7 +615,7 @@ export default function AgentOverviewPage() {
   }, [agentNameParam]);
 
   useEffect(() => {
-    if (role !== "team_lead") {
+    if (!canViewTeam) {
       setDirectoryAgents([]);
       return undefined;
     }
@@ -372,7 +624,32 @@ export default function AgentOverviewPage() {
       setDirectoryAgents,
       () => setError("The agent directory could not be loaded.")
     );
-  }, [role]);
+  }, [canViewTeam]);
+
+  useEffect(() => {
+    if (!canViewTeam) {
+      setAllUsers([]);
+      return undefined;
+    }
+
+    return subscribeUsers(
+      setAllUsers,
+      () => setError("The user directory could not be loaded.")
+    );
+  }, [canViewTeam]);
+
+  const inactiveUserIds = useMemo(
+    () => new Set(allUsers
+      .filter((user) => user.disabled || user.role === "disabled")
+      .map((user) => user.id)),
+    [allUsers]
+  );
+
+  const isActiveOperationalRecord = useCallback((row) => {
+    if (!canViewTeam) return true;
+    const id = row.agentId || row.createdById;
+    return !id || !inactiveUserIds.has(id);
+  }, [canViewTeam, inactiveUserIds]);
 
   useEffect(() => {
     let active = true;
@@ -447,24 +724,24 @@ export default function AgentOverviewPage() {
   }, [detailAgentId]);
 
   const scopedActions = useMemo(() => {
-    if (canViewTeam) return actions;
+    if (canViewTeam) return actions.filter(isActiveOperationalRecord);
     return actions.filter((action) => action.agentId === currentUser?.uid);
-  }, [actions, canViewTeam, currentUser?.uid]);
+  }, [actions, canViewTeam, currentUser?.uid, isActiveOperationalRecord]);
 
   const scopedFlags = useMemo(() => {
-    if (canViewTeam) return flags;
+    if (canViewTeam) return flags.filter(isActiveOperationalRecord);
     return flags.filter(
       (flag) =>
         flag.agentId === currentUser?.uid ||
         getAgentName(flag) === signedInName ||
         getAgentName(flag) === currentUser?.email
     );
-  }, [canViewTeam, currentUser?.email, currentUser?.uid, flags, signedInName]);
+  }, [canViewTeam, currentUser?.email, currentUser?.uid, flags, isActiveOperationalRecord, signedInName]);
 
   const scopedTickets = useMemo(() => {
-    if (canViewTeam) return tickets;
+    if (canViewTeam) return tickets.filter(isActiveOperationalRecord);
     return tickets.filter((ticket) => ticket.createdById === currentUser?.uid);
-  }, [canViewTeam, currentUser?.uid, tickets]);
+  }, [canViewTeam, currentUser?.uid, isActiveOperationalRecord, tickets]);
 
   const observedAgents = useMemo(() => {
     const identities = new Map();
@@ -507,21 +784,29 @@ export default function AgentOverviewPage() {
       ? periodTickets.filter((ticket) => ticket.createdById === selectedAgentId)
       : periodTickets;
 
-  const openFlags = visibleFlags.filter((flag) => !flag.reviewed);
-  const criticalFlags = visibleFlags.filter((flag) => flag.type === "critical");
+  const search = recordQuery.trim().toLowerCase();
+  const displayActions = visibleActions.filter((action) =>
+    recordMatchesSearch(action, ["id", "agentId", "agentName", "actionType", "note", "responseNote", "status", "source"], search)
+  );
+  const displayFlags = visibleFlags.filter((flag) =>
+    recordMatchesSearch(flag, ["id", "agentId", "agentName", "type", "matchedPhrase", "transcriptSnippet", "feedback", "source"], search)
+  );
+  const displayTickets = visibleTickets.filter((ticket) =>
+    recordMatchesSearch(ticket, ["id", "createdById", "createdByName", "agentName", "title", "customerName", "customerPhone", "accountNumber", "department", "priority", "status", "description", "nextAction"], search)
+  );
+
+  const openFlags = displayFlags.filter((flag) => !flag.reviewed);
+  const criticalFlags = displayFlags.filter((flag) => flag.type === "critical");
   const recentVisibleFlags = useMemo(
-    () => [...visibleFlags]
+    () => [...displayFlags]
       .sort((a, b) => (getDate(b, ["timestamp"])?.getTime() || 0) - (getDate(a, ["timestamp"])?.getTime() || 0))
       .slice(0, 6),
-    [visibleFlags]
+    [displayFlags]
   );
-  const todayFlags = visibleFlags.filter((flag) => isInPeriod(flag, ["timestamp"], "day"));
+  const todayFlags = displayFlags.filter((flag) => isInPeriod(flag, ["timestamp"], "day"));
   const todayCriticalFlags = todayFlags.filter((flag) => flag.type === "critical");
   const todaySoftSkillFlags = todayFlags.filter((flag) => flag.type === "soft_skill");
-  const qualityScore = calculateQualityScore(visibleActions, visibleFlags);
-  const mistakeRate = visibleActions.length
-    ? Math.round((visibleFlags.length / visibleActions.length) * 100)
-    : 0;
+  const qualityScore = calculateQualityScore(displayActions, displayFlags);
 
   const agentBreakdown = useMemo(() => {
     const identities = new Map();
@@ -534,7 +819,7 @@ export default function AgentOverviewPage() {
       const agentFlags = periodFlags.filter((row) => row.agentId === id);
       const agentTickets = periodTickets.filter((row) => row.createdById === id);
       return {
-        id, name, calls: agentActions.length, mistakes: agentFlags.length,
+        id, name, supportRequests: agentActions.length, mistakes: agentFlags.length,
         open: agentFlags.filter((flag) => !flag.reviewed).length,
         tickets: agentTickets.length, score: calculateQualityScore(agentActions, agentFlags),
       };
@@ -542,12 +827,12 @@ export default function AgentOverviewPage() {
       .sort((a, b) => a.score - b.score || b.mistakes - a.mistakes);
   }, [periodActions, periodFlags, periodTickets]);
 
-  const repeatedMistakes = countBy(visibleFlags, (flag) => flag.matchedPhrase || "Review needed");
-  const actionTrends = countBy(visibleActions, (action) => action.actionType || "Unlabeled Action");
-  const ticketDepartmentTrends = countBy(visibleTickets, (ticket) => ticket.department || "General");
-  const ticketStatusTrends = countBy(visibleTickets, (ticket) => ticket.status || "Open");
-  const ticketTitleTrends = countBy(visibleTickets, (ticket) => ticket.title || "Untitled Ticket");
-  const activityBuckets = getActivityBuckets(visibleActions, visibleFlags, visibleTickets, period);
+  const repeatedMistakes = countBy(displayFlags, (flag) => flag.matchedPhrase || "Review needed");
+  const actionTrends = countBy(displayActions, (action) => action.actionType || "Unlabeled Support Request");
+  const ticketDepartmentTrends = countBy(displayTickets, (ticket) => ticket.department || "General");
+  const ticketStatusTrends = countBy(displayTickets, (ticket) => ticket.status || "Open");
+  const ticketTitleTrends = countBy(displayTickets, (ticket) => ticket.title || "Untitled Ticket");
+  const activityBuckets = getActivityBuckets(displayActions, displayFlags, displayTickets, period);
 
   const handleMarkReviewed = async (flagId) => {
     setReviewingId(flagId);
@@ -584,7 +869,7 @@ export default function AgentOverviewPage() {
         })),
         ...exportActions.map((action) => ({
           date: getDate(action, ["timestamp"]),
-          type: "action",
+          type: "support_request",
           matchedPhrase: action.actionType || "",
           transcriptSnippet: action.source || "",
           reviewed: "",
@@ -622,33 +907,107 @@ export default function AgentOverviewPage() {
 
   const renderAgentSimpleOverview = () => (
     <>
+      <section className="mb-5 glass-card p-4 sm:p-5">
+        <div className="grid gap-3 lg:grid-cols-[auto_1fr] lg:items-end">
+          <div>
+            <p className="label-field mb-2">Period</p>
+            <div className="flex gap-2 overflow-x-auto">
+            {PERIODS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setPeriod(item.id)}
+                className={`shrink-0 rounded-2xl px-4 py-2.5 text-sm font-bold transition-colors ${
+                  period === item.id
+                    ? "bg-brand-primary text-white shadow-card"
+                    : "border border-surface-border bg-surface-card text-semantic-neutral hover:border-brand-primary hover:text-brand-primary"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+            </div>
+          </div>
+          <label>
+            <span className="label-field mb-2 block">Search Records</span>
+            <input
+              type="search"
+              value={recordQuery}
+              onChange={(event) => setRecordQuery(event.target.value)}
+              className="input-field"
+              placeholder="Search your tickets, support requests, mistakes, or IDs..."
+            />
+          </label>
+        </div>
+      </section>
+
       <section className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <MetricCard
           label="Score"
-          value={visibleActions.length || visibleFlags.length ? qualityScore : "New"}
+          value={displayActions.length || displayFlags.length ? qualityScore : "New"}
           tone="primary"
-          helper={visibleActions.length || visibleFlags.length ? "Current period" : "No coaching data yet"}
+          helper={displayActions.length || displayFlags.length ? "Current period" : "No coaching data yet"}
         />
-        <MetricCard label="Calls" value={visibleActions.length} helper="Logged actions" />
-        <MetricCard label="Mistakes" value={visibleFlags.length} tone="error" />
+        <MetricCard label="Support Requests" value={displayActions.length} helper="Raised by you" />
+        <MetricCard label="Mistakes" value={displayFlags.length} tone="error" />
         <MetricCard label="Open Items" value={openFlags.length} tone="warning" />
-        <MetricCard label="Tickets" value={visibleTickets.length} tone="success" />
+        <MetricCard label="Tickets" value={displayTickets.length} tone="success" />
       </section>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <TrendBars
+        <MistakeSummary
           title="Your Repeated Mistakes"
           subtitle="The coaching themes that appear most often for you."
           rows={repeatedMistakes}
-          emptyText="Quality records are available to your team lead and quality supervisor."
+          emptyText="Quality records are available to your team lead and Quality Control."
         />
-        <TrendBars
+        <RankedTiles
           title="Your Ticket Types"
           subtitle="The customer cases you handled most."
           rows={ticketDepartmentTrends}
           emptyText="No tickets in this period."
+          tone="success"
         />
       </div>
+
+      <section className="glass-card mt-5 p-5 sm:p-6">
+        <div className="mb-4">
+          <h2 className="text-xl font-extrabold text-slate-950">Recent Mistake Details</h2>
+          <p className="mt-1 text-sm text-semantic-neutral">
+            Open a coaching item to see when it happened, what phrase was matched, and what feedback was recorded.
+          </p>
+        </div>
+        {recentVisibleFlags.length === 0 ? (
+          <p className="rounded-2xl bg-white/60 p-5 text-sm font-semibold text-semantic-neutral">
+            No mistakes match this period or search.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {recentVisibleFlags.map((flag) => (
+              <button
+                key={flag.id}
+                type="button"
+                onClick={() => setSelectedMistake(flag)}
+                className="w-full rounded-2xl border border-surface-border bg-surface-card p-4 text-left transition-colors hover:border-brand-primary hover:bg-brand-faint/20"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="font-extrabold text-slate-950">
+                      {flag.matchedPhrase || "Review needed"}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-semantic-neutral">
+                      {flag.type === "critical" ? "Critical" : "Soft skill"} · {formatTimestamp(flag.timestamp)}
+                    </p>
+                  </div>
+                  <span className="rounded-xl bg-brand-faint px-3 py-2 text-sm font-extrabold text-brand-primary">
+                    Open details
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
     </>
   );
 
@@ -695,7 +1054,7 @@ export default function AgentOverviewPage() {
             <div>
               <h2 className="text-xl font-extrabold text-slate-950">Export Flag History</h2>
               <p className="mt-1 text-sm leading-6 text-semantic-neutral">
-                Download flags and logged actions for a coaching conversation.
+                Download flags and support requests for a coaching conversation.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -746,24 +1105,42 @@ export default function AgentOverviewPage() {
           ))}
         </div>
 
-        <div className="flex flex-col gap-3 rounded-3xl bg-white/70 p-3 shadow-sm backdrop-blur sm:flex-row sm:items-end">
-          {PERIODS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setPeriod(item.id)}
-              className={`shrink-0 rounded-2xl px-4 py-2 text-sm font-bold transition-colors ${
-                period === item.id
-                  ? "bg-white text-brand-primary shadow-card"
-                  : "bg-white/60 text-semantic-neutral backdrop-blur hover:bg-white"
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
+        <div className="grid gap-3 rounded-3xl bg-white/70 p-3 shadow-sm backdrop-blur xl:grid-cols-[auto_1fr_260px] xl:items-end">
+          <div>
+            <p className="label-field mb-2">Period</p>
+            <div className="flex gap-2 overflow-x-auto">
+              {PERIODS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setPeriod(item.id)}
+                  className={`shrink-0 rounded-2xl px-4 py-2.5 text-sm font-bold transition-colors ${
+                    period === item.id
+                      ? "bg-brand-primary text-white shadow-card"
+                      : "border border-surface-border bg-surface-card text-semantic-neutral hover:border-brand-primary hover:text-brand-primary"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label>
+            <span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.12em] text-semantic-neutral">
+              Search records
+            </span>
+            <input
+              type="search"
+              value={recordQuery}
+              onChange={(event) => setRecordQuery(event.target.value)}
+              className="input-field py-2.5"
+              placeholder="Search agent, ticket, phrase, status, note, or ID..."
+            />
+          </label>
 
           {!agentNameParam && (
-            <label className="sm:ml-auto sm:min-w-[240px]">
+            <label>
               <span className="mb-1.5 block text-xs font-extrabold uppercase tracking-[0.12em] text-semantic-neutral">
                 Agent filter
               </span>
@@ -782,13 +1159,12 @@ export default function AgentOverviewPage() {
         </div>
       </section>
 
-      <section className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <MetricCard label="Score" value={qualityScore} tone="primary" />
-        <MetricCard label="Calls" value={visibleActions.length} />
-        <MetricCard label="Tickets" value={visibleTickets.length} tone="success" />
-        <MetricCard label="Mistakes" value={visibleFlags.length} tone="error" />
-        <MetricCard label="Open" value={openFlags.length} tone="warning" />
-        <MetricCard label="Mistake Rate" value={`${mistakeRate}%`} />
+      <section className="metric-grid mb-6 grid gap-3">
+        <MetricCard label="Score" value={qualityScore} tone="primary" destination="Overview" onClick={() => setTab("Overview")} />
+        <MetricCard label="Support Requests" value={displayActions.length} destination="Support Requests" onClick={() => setTab("Support Requests")} />
+        <MetricCard label="Tickets" value={displayTickets.length} tone="success" destination="Tickets" onClick={() => setTab("Tickets")} />
+        <MetricCard label="Mistakes" value={displayFlags.length} tone="error" destination="Mistakes" onClick={() => setTab("Mistakes")} />
+        <MetricCard label="Open" value={openFlags.length} tone="warning" destination="Mistakes" onClick={() => setTab("Mistakes")} />
       </section>
 
       {agentNameParam && detailAgentId && (
@@ -807,22 +1183,95 @@ export default function AgentOverviewPage() {
       {tab === "Overview" && (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <ActivityDashboard rows={activityBuckets} period={period} />
-          <TrendBars title="Most Logged Call Actions" rows={actionTrends} />
-          <TrendBars title="Most Raised Ticket Departments" rows={ticketDepartmentTrends} />
-          <TrendBars title="Repeated Mistakes" rows={repeatedMistakes} />
-          <TrendBars title="Ticket Status Mix" rows={ticketStatusTrends} />
+          <RankedTiles
+            title="Most Requested Support Areas"
+            subtitle="Topics agents asked help with most often."
+            rows={actionTrends}
+            emptyText="No support requests in this period."
+          />
+          <RankedTiles
+            title="Most Raised Ticket Departments"
+            subtitle="Departments receiving the most ticket activity."
+            rows={ticketDepartmentTrends}
+            emptyText="No tickets in this period."
+            tone="success"
+          />
+          <MistakeSummary
+            title="Repeated Mistakes"
+            subtitle="The most common coaching or quality themes."
+            rows={repeatedMistakes}
+            emptyText="No mistakes in this period."
+          />
+          <StatusMix
+            title="Ticket Status Mix"
+            subtitle="Open, pending, and resolved ticket distribution."
+            rows={ticketStatusTrends}
+            emptyText="No ticket status data in this period."
+          />
+        </div>
+      )}
+
+      {tab === "Support Requests" && (
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[420px_1fr]">
+          <RankedTiles
+            title="Most Requested Support Areas"
+            subtitle="Where agents asked for help during the selected period."
+            rows={actionTrends}
+            emptyText="No support requests in this period."
+          />
+          <section className="glass-card p-5 sm:p-6">
+            <div className="mb-5">
+              <h2 className="text-xl font-extrabold text-slate-950">Recent Support Requests</h2>
+              <p className="mt-1 text-sm text-semantic-neutral">
+                Showing agents who raised help requests and the topic they selected.
+              </p>
+            </div>
+            {displayActions.length === 0 ? (
+              <p className="rounded-2xl bg-white/60 p-5 text-sm font-semibold text-semantic-neutral">
+                No support requests in this period.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {displayActions.slice(0, 12).map((action) => (
+                  <article key={action.id} className="rounded-2xl border border-surface-border bg-surface-card p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-extrabold text-slate-950">
+                          {getAgentName(action)}
+                        </p>
+                        <p className="mt-1 text-sm text-semantic-neutral">
+                          Needs support with <span className="font-extrabold text-brand-primary">{action.actionType || "customer support"}</span>
+                        </p>
+                        <p className="mt-2 text-xs font-semibold text-semantic-neutral">
+                          {formatTimestamp(action.timestamp)}
+                        </p>
+                      </div>
+                      {action.agentId && (
+                        <Link
+                          to={`/overview/agents/${encodeURIComponent(getAgentName(action))}?agentId=${encodeURIComponent(action.agentId)}`}
+                          className="rounded-xl border border-surface-border px-3 py-2 text-sm font-extrabold text-brand-primary transition-colors hover:border-brand-primary hover:bg-brand-faint"
+                        >
+                          View agent
+                        </Link>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       )}
 
       {tab === "Mistakes" && (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[420px_1fr]">
-          <TrendBars title="Repeated Mistakes" rows={repeatedMistakes} />
+          <MistakeSummary title="Repeated Mistakes" rows={repeatedMistakes} />
           <section className="glass-card p-5 sm:p-6">
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-xl font-extrabold text-slate-950">Recent Mistakes</h2>
                 <p className="mt-1 text-sm text-semantic-neutral">
-                  Showing the latest {Math.min(recentVisibleFlags.length, 6)} of {visibleFlags.length} flags.
+                  Showing the latest {Math.min(recentVisibleFlags.length, 6)} of {displayFlags.length} flags.
                 </p>
               </div>
               <span className="rounded-full bg-red-50 px-3 py-1 text-sm font-extrabold text-semantic-error">
@@ -850,6 +1299,14 @@ export default function AgentOverviewPage() {
                             View agent
                           </Link>
                         )}
+                        {flag.kbArticleId && (
+                          <Link
+                            to={`/agent/policies/${encodeURIComponent(flag.kbArticleId)}`}
+                            className="text-sm font-extrabold text-brand-primary hover:text-brand-light"
+                          >
+                            Open KB card
+                          </Link>
+                        )}
                       </div>
                       <p className="font-extrabold text-slate-950">
                         {flag.matchedPhrase || "Review needed"}
@@ -874,7 +1331,7 @@ export default function AgentOverviewPage() {
                   </div>
                 </article>
               ))}
-              {!visibleFlags.length && (
+              {!displayFlags.length && (
                 <p className="rounded-2xl bg-white/60 p-5 text-sm font-semibold text-semantic-neutral">
                   No mistakes in this period.
                 </p>
@@ -907,7 +1364,7 @@ export default function AgentOverviewPage() {
                 <p className="text-3xl font-extrabold text-brand-primary">{agent.score}</p>
               </div>
               <div className="mt-5 grid grid-cols-4 gap-2 text-center text-sm">
-                <span className="rounded-2xl border border-surface-border bg-surface-card px-2 py-3 font-bold text-semantic-neutral">{agent.calls} calls</span>
+                <span className="rounded-2xl border border-surface-border bg-surface-card px-2 py-3 font-bold text-semantic-neutral">{agent.supportRequests} requests</span>
                 <span className="rounded-2xl border border-surface-border bg-surface-card px-2 py-3 font-bold text-semantic-neutral">{agent.tickets} tickets</span>
                 <span className="rounded-2xl border border-surface-border bg-surface-card px-2 py-3 font-bold text-semantic-neutral">{agent.mistakes} flags</span>
                 <span className="rounded-2xl border border-surface-border bg-surface-card px-2 py-3 font-bold text-semantic-neutral">{agent.open} open</span>
@@ -920,21 +1377,28 @@ export default function AgentOverviewPage() {
 
       {tab === "Tickets" && (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <TrendBars title="Most Raised Ticket Departments" rows={ticketDepartmentTrends} />
-          <TrendBars title="Most Repeated Ticket Titles" rows={ticketTitleTrends} />
-          <TrendBars title="Ticket Status Mix" rows={ticketStatusTrends} />
+          <RankedTiles title="Most Raised Ticket Departments" rows={ticketDepartmentTrends} tone="success" />
+          <RankedTiles title="Most Repeated Ticket Titles" rows={ticketTitleTrends} tone="warning" />
+          <StatusMix title="Ticket Status Mix" rows={ticketStatusTrends} />
           <section className="glass-card p-5 sm:p-6">
             <h2 className="text-xl font-extrabold text-slate-950">Recent Tickets</h2>
             <div className="mt-5 space-y-3">
-              {visibleTickets.slice(0, 8).map((ticket) => (
-                <article key={ticket.id} className="rounded-2xl border border-surface-border bg-surface-card p-4">
+              {displayTickets.slice(0, 8).map((ticket) => (
+                <Link
+                  key={ticket.id}
+                  to={`/tickets?highlight=${encodeURIComponent(ticket.id)}`}
+                  className="block rounded-2xl border border-surface-border bg-surface-card p-4 transition-colors hover:border-brand-primary hover:bg-brand-faint/20"
+                >
                   <p className="font-extrabold text-slate-950">{ticket.title || "Untitled Ticket"}</p>
                   <p className="mt-1 text-sm text-semantic-neutral">
                     {ticket.department || "General"} · {ticket.status || "Open"} · {getAgentName(ticket)}
                   </p>
-                </article>
+                  <p className="mt-3 text-xs font-extrabold uppercase tracking-[0.12em] text-brand-primary">
+                    Open ticket
+                  </p>
+                </Link>
               ))}
-              {!visibleTickets.length && (
+              {!displayTickets.length && (
                 <p className="rounded-2xl bg-white/60 p-5 text-sm font-semibold text-semantic-neutral">
                   No tickets in this period.
                 </p>
@@ -1013,6 +1477,56 @@ export default function AgentOverviewPage() {
           )}
         </div>
       </main>
+
+      {selectedMistake && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 px-4 py-6 backdrop-blur-sm">
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-card border border-surface-border bg-surface-card p-6 shadow-[0_28px_90px_rgba(2,6,23,0.35)]">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="label-field">Mistake Details</p>
+                <h2 className="mt-1 text-2xl font-extrabold text-slate-950">
+                  {selectedMistake.matchedPhrase || "Review needed"}
+                </h2>
+                <p className="mt-1 text-sm font-semibold text-semantic-neutral">
+                  {selectedMistake.type === "critical" ? "Critical" : "Soft skill"} · {formatTimestamp(selectedMistake.timestamp)}
+                </p>
+              </div>
+              <button type="button" onClick={() => setSelectedMistake(null)} className="btn-secondary px-4 text-sm font-bold">
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-surface-border bg-surface-bg p-4">
+                <p className="label-field">Transcript Snippet</p>
+                <p className="mt-2 text-sm leading-6 text-slate-900">
+                  {selectedMistake.transcriptSnippet || "No transcript snippet was saved for this item."}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-surface-border bg-surface-bg p-4">
+                <p className="label-field">Feedback</p>
+                <p className="mt-2 text-sm leading-6 text-slate-900">
+                  {selectedMistake.feedback || "No feedback note was added yet."}
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-surface-border bg-surface-bg p-4">
+                  <p className="label-field">Status</p>
+                  <p className="mt-2 text-sm font-extrabold text-slate-950">
+                    {selectedMistake.reviewed ? "Reviewed" : "Open"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-surface-border bg-surface-bg p-4">
+                  <p className="label-field">Record ID</p>
+                  <p className="mt-2 break-all font-mono text-xs font-bold text-semantic-neutral">
+                    {selectedMistake.id}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

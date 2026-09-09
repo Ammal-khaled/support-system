@@ -10,6 +10,9 @@ export default function Sidebar() {
   const { currentUser, role, userProfile } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const canReceiveDesktopAlerts = ["team_lead", "quality_supervisor"].includes(role);
+  const roleLabel = role === "quality_supervisor"
+    ? "Quality Control"
+    : (role || "agent").replace("_", " ");
 
   const enableDesktopAlerts = async () => {
     if (typeof Notification === "undefined") return;
@@ -24,19 +27,21 @@ export default function Sidebar() {
   const navItems =
     role === "team_lead"
       ? [
-          { name: "Overview", path: "/overview", code: "OV" },
+          { name: "Dashboard", path: "/overview", code: "DB" },
           { name: "Tickets", path: "/tickets", code: "TK" },
-          { name: "Knowledge", path: "/team-lead", code: "KB" },
-          { name: "Users", path: "/create-user", code: "CU" },
+          { name: "TL Configuration", path: "/team-lead", code: "TL" },
+          { name: "Quality Review", path: "/quality", code: "QA" },
+          { name: "Team Management", path: "/create-user", code: "TM" },
         ]
       : role === "quality_supervisor"
         ? [
-            { name: "Overview", path: "/overview", code: "OV" },
+            { name: "Dashboard", path: "/overview", code: "DB" },
+            { name: "Quality Review", path: "/quality", code: "QA" },
             { name: "Tickets", path: "/tickets", code: "TK" },
             { name: "Agent", path: "/agent", code: "AV" },
           ]
       : [
-          { name: "Overview", path: "/overview", code: "OV" },
+          { name: "Dashboard", path: "/overview", code: "DB" },
           { name: "Tickets", path: "/tickets", code: "TK" },
           { name: "Agent", path: "/agent", code: "AV" },
         ];
@@ -148,7 +153,7 @@ export default function Sidebar() {
               {userProfile?.name || currentUser?.displayName || currentUser?.email || "Agent"}
             </p>
             <p className="mt-1 text-xs font-semibold capitalize text-semantic-neutral">
-              {(role || "agent").replace("_", " ")}
+              {roleLabel}
           </p>
           </div>
           <button

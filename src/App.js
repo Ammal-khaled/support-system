@@ -3,6 +3,7 @@ import Login from "./pages/Login";
 import AgentDashboard from "./pages/AgentDashboard";
 import AgentOverviewPage from "./pages/AgentOverviewPage";
 import TeamLeadDashboard from "./pages/TeamLeadDashboard";
+import QualityDashboard from "./pages/QualityDashboard";
 import CreateUser from "./pages/CreateUser";
 import ChangePassword from "./pages/ChangePassword";
 import PolicyDetailPage from "./pages/PolicyDetailPage";
@@ -82,6 +83,15 @@ function App() {
             element={
               <ProtectedRoute requiredRole="team_lead">
                 <TeamLeadDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/quality"
+            element={
+              <ProtectedRoute requiredRole={["team_lead", "quality_supervisor"]}>
+                <QualityDashboard />
               </ProtectedRoute>
             }
           />

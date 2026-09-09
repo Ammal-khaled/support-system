@@ -2,8 +2,10 @@ importScripts("auth.js");
 const FIREBASE_PROJECT_ID = "csr-support-system";
 // Replace with the final Netlify URL after the first deploy.
 const DASHBOARD_URL = "https://aquacooldesk.netlify.app";
+const AI_WORKER_URL = "https://aquadesk-ai.aquadesk-support.workers.dev";
 const FIRESTORE_BASE_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
 const FIRESTORE_COMMIT_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:commit`;
+const CALL_TRANSCRIPT_KEY = "activeCallTranscript";
 
 function generateFirestoreId() {
   const chars =
@@ -19,6 +21,10 @@ function generateFirestoreId() {
 
 function getStringField(fields, name) {
   return fields?.[name]?.stringValue || "";
+}
+
+function getBooleanField(fields, name) {
+  return Boolean(fields?.[name]?.booleanValue);
 }
 
 async function fetchCollection(collectionName) {
@@ -64,6 +70,49 @@ async function getKbArticles() {
     content: getStringField(document.fields, "content"),
   }));
 }
+
+async function getQualityFlagsForAgent(agentId) {
+  const session = await getAuthSession();
+  const response = await fetch(`${FIRESTORE_BASE_URL}:runQuery`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.idToken}`,
+    },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId: "flags" }],
+        where: {
+          fieldFilter: {
+            field: { fieldPath: "agentId" },
+            op: "EQUAL",
+            value: { stringValue: agentId },
+          },
+        },
+        limit: 25,
+      },
+    }),
+  });
+
+  if (!response.ok) throw new Error(`Could not load quality flags: ${response.status}`);
+  const rows = await response.json();
+
+  return rows
+    .map((row) => row.document)
+    .filter(Boolean)
+    .map((document) => {
+      const fields = document.fields || {};
+      return {
+        id: document.name.split("/").pop(),
+        type: getStringField(fields, "type"),
+        matchedPhrase: getStringField(fields, "matchedPhrase"),
+        transcriptSnippet: getStringField(fields, "transcriptSnippet"),
+        feedback: getStringField(fields, "feedback"),
+        reviewed: getBooleanField(fields, "reviewed"),
+      };
+    });
+}
+
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -298,11 +347,110 @@ async function logSoftSkill(transcript, bannedPhrases, agentContext) {
   });
 }
 
+async function getActiveTranscript() {
+  const stored = await chrome.storage.session.get(CALL_TRANSCRIPT_KEY);
+  return String(stored[CALL_TRANSCRIPT_KEY] || "").trim();
+}
+
+async function appendTranscript(transcript) {
+  const existing = await getActiveTranscript();
+  const combined = [existing, transcript.trim()].filter(Boolean).join(" ");
+  await chrome.storage.session.set({ [CALL_TRANSCRIPT_KEY]: combined.slice(-50000) });
+  return combined;
+}
+
+async function analyzeAfterCall(transcript, bannedPhrases, kbArticles, qualityFlags, agentContext) {
+  const response = await fetch(AI_WORKER_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transcript, bannedPhrases, kbArticles, qualityFlags }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || `AI analysis failed: ${response.status}`);
+  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!raw) throw new Error("AI returned an empty after-call report.");
+
+  const cleaned = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+  const jsonStart = cleaned.indexOf("{");
+  const jsonEnd = cleaned.lastIndexOf("}");
+  if (jsonStart === -1 || jsonEnd === -1) throw new Error("AI returned an invalid after-call report.");
+
+  return { ...JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1)), ...agentContext };
+}
+
+async function writeAfterCallReport(report) {
+  const documentId = generateFirestoreId();
+  const session = await getAuthSession();
+  if (session.uid !== report.agentId) throw new Error("Extension account changed.");
+
+  const jsonField = (value) => ({ stringValue: JSON.stringify(value ?? null) });
+  const response = await fetch(FIRESTORE_COMMIT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.idToken}` },
+    body: JSON.stringify({
+      writes: [{
+        update: {
+          name: `projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/after_call_reports/${documentId}`,
+          fields: {
+            agentId: { stringValue: report.agentId },
+            agentName: { stringValue: report.agentName },
+            transcript: { stringValue: report.transcript || "" },
+            summary: { stringValue: report.summary || "" },
+            overallStatus: { stringValue: report.overallStatus || "coaching_needed" },
+            severity: { stringValue: report.severity || "none" },
+            softSkills: jsonField(report.softSkills),
+            bannedPhrases: jsonField(report.bannedPhrases),
+            incorrectInformation: jsonField(report.incorrectInformation),
+            recommendations: jsonField(report.recommendations),
+            status: { stringValue: "open" },
+            source: { stringValue: "extension_after_call" },
+          },
+        },
+        updateTransforms: [{ fieldPath: "createdAt", setToServerValue: "REQUEST_TIME" }],
+      }],
+    }),
+  });
+  if (!response.ok) throw new Error(`After-call report write failed: ${response.status}`);
+  return documentId;
+}
+
+async function finishCallAndAnalyze() {
+  const transcript = await getActiveTranscript();
+  if (!transcript) throw new Error("No transcript has been captured for this call.");
+
+  const agentContext = await getAgentContext();
+  const [bannedPhrases, kbArticles, qualityFlags] = await Promise.all([
+    getBannedPhrases(),
+    getKbArticles(),
+    getQualityFlagsForAgent(agentContext.agentId),
+  ]);
+  const report = await analyzeAfterCall(transcript, bannedPhrases, kbArticles, qualityFlags, agentContext);
+  report.transcript = transcript;
+  const reportId = await writeAfterCallReport(report);
+  await chrome.storage.session.remove(CALL_TRANSCRIPT_KEY);
+  return { reportId, summary: report.summary, severity: report.severity };
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   console.log("CSR Support Extension installed and ready.");
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === "GET_CALL_STATUS") {
+    getActiveTranscript()
+      .then((transcript) => sendResponse({ status: "ready", characters: transcript.length }))
+      .catch((error) => sendResponse({ status: "error", message: error.message }));
+    return true;
+  }
+
+  if (request.type === "END_CALL_ANALYSIS") {
+    finishCallAndAnalyze()
+      .then((result) => sendResponse({ status: "complete", ...result }))
+      .catch((error) => sendResponse({ status: "error", message: error.message }));
+    return true;
+  }
+
   if (request.type === "CHECK_TRANSCRIPT") {
     const transcript = String(request.payload || "").trim();
 
@@ -311,7 +459,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
 
-    Promise.all([getBannedPhrases(), getKbArticles(), getAgentContext()])
+    appendTranscript(transcript)
+      .then(() => Promise.all([getBannedPhrases(), getKbArticles(), getAgentContext()]))
       .then(([bannedPhrases, kbArticles, agentContext]) =>
         Promise.all([
           checkCritical(

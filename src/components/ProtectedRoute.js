@@ -16,6 +16,19 @@ export default function ProtectedRoute({ children, requiredRole, allowTemporaryP
     return <Navigate to="/login" replace />;
   }
 
+  if (userProfile?.disabled || role === "disabled") {
+    return (
+      <div className="page-bg flex min-h-screen items-center justify-center p-4">
+        <div className="card max-w-md p-6 text-center">
+          <h1 className="text-2xl font-extrabold text-slate-950">Account Deactivated</h1>
+          <p className="mt-2 text-sm text-semantic-neutral">
+            This AquaDesk profile is not active. Contact your team lead if this is unexpected.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (userProfile?.mustChangePassword && !allowTemporaryPassword) {
     return <Navigate to="/change-password" replace />;
   }

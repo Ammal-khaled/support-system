@@ -23,6 +23,7 @@ export default function BannedPhrasesManager() {
   const [correctPhrase, setCorrectPhrase] = useState("");
   const [severity, setSeverity] = useState("critical");
   const [category, setCategory] = useState("");
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -85,14 +86,26 @@ export default function BannedPhrasesManager() {
     else setError("Could not delete the phrase. Please try again.");
   };
 
+  const visiblePhrases = phrases.filter((phrase) => {
+    const search = query.trim().toLowerCase();
+    if (!search) return true;
+    return [
+      phrase.id,
+      phrase.wrongPhrase,
+      phrase.correctPhrase,
+      phrase.severity,
+      phrase.category,
+    ].some((field) => String(field || "").toLowerCase().includes(search));
+  });
+
   return (
     <div className="space-y-6">
       <div className="glass-card p-5 sm:p-8">
         <h2 className="text-xl font-extrabold text-slate-950 mb-1">
-          {selected ? "Edit Banned Phrase" : "Add Banned Phrase"}
+          {selected ? "Edit Flag Rule" : "Add Flag Rule"}
         </h2>
         <p className="text-sm leading-6 text-semantic-neutral mb-6">
-          Define phrases agents should avoid and the preferred alternative.
+          Define phrases or behaviors that should create critical or soft-skill quality flags.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -102,7 +115,7 @@ export default function BannedPhrasesManager() {
               type="text"
               value={wrongPhrase}
               onChange={(e) => setWrongPhrase(e.target.value)}
-              className="w-full rounded-2xl border border-white/80 bg-white/75 p-3 text-sm font-medium text-slate-900 shadow-sm backdrop-blur outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-faint"
+              className="input-field"
               placeholder="e.g. i can't help you"
               required
             />
@@ -113,7 +126,7 @@ export default function BannedPhrasesManager() {
               type="text"
               value={correctPhrase}
               onChange={(e) => setCorrectPhrase(e.target.value)}
-              className="w-full rounded-2xl border border-white/80 bg-white/75 p-3 text-sm font-medium text-slate-900 shadow-sm backdrop-blur outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-faint"
+              className="input-field"
               placeholder="Preferred phrasing"
               required
             />
@@ -124,7 +137,7 @@ export default function BannedPhrasesManager() {
               <select
                 value={severity}
                 onChange={(e) => setSeverity(e.target.value)}
-                className="w-full rounded-2xl border border-white/80 bg-white/75 p-3 text-sm font-medium text-slate-900 shadow-sm backdrop-blur outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-faint"
+                className="input-field"
               >
                 {SEVERITY_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -139,7 +152,7 @@ export default function BannedPhrasesManager() {
                 type="text"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full rounded-2xl border border-white/80 bg-white/75 p-3 text-sm font-medium text-slate-900 shadow-sm backdrop-blur outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-faint"
+                className="input-field"
                 placeholder="e.g. escalation"
               />
             </div>
@@ -151,10 +164,10 @@ export default function BannedPhrasesManager() {
                 Delete
               </button>
             )}
-            <button type="button" onClick={clearForm} className="min-h-[48px] rounded-2xl border border-white/80 bg-white/70 px-4 py-3 text-sm font-bold text-slate-700 shadow-sm backdrop-blur transition-colors hover:bg-white">
+            <button type="button" onClick={clearForm} className="btn-secondary min-h-[48px] px-4 py-3 text-sm font-bold">
               Clear
             </button>
-            <button type="submit" className="min-h-[48px] rounded-2xl bg-brand-primary px-4 py-3 text-sm font-bold text-white shadow-card transition-colors hover:bg-brand-light disabled:cursor-not-allowed disabled:opacity-60 px-6">
+            <button type="submit" className="btn-primary px-6 text-sm">
               {selected ? "Update Phrase" : "Add Phrase"}
             </button>
           </div>
@@ -162,24 +175,31 @@ export default function BannedPhrasesManager() {
       </div>
 
       <div className="glass-card p-5 sm:p-8">
-        <h3 className="text-xl font-extrabold text-slate-950 mb-4">Existing Phrases ({phrases.length})</h3>
+        <h3 className="text-xl font-extrabold text-slate-950 mb-4">Existing Flag Rules ({phrases.length})</h3>
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          className="input-field mb-4"
+          placeholder="Search rules by phrase, alternative, category, severity, or ID..."
+        />
 
         {loading ? (
           <p className="text-semantic-neutral">Loading phrases...</p>
         ) : error ? (
           <p className="text-semantic-error text-sm font-semibold">{error}</p>
-        ) : phrases.length === 0 ? (
-          <p className="text-semantic-neutral">No banned phrases configured yet.</p>
+        ) : visiblePhrases.length === 0 ? (
+          <p className="text-semantic-neutral">No flag rules configured yet.</p>
         ) : (
           <ul className="space-y-2">
-            {phrases.map((phrase) => (
+            {visiblePhrases.map((phrase) => (
               <li
                 key={phrase.id}
                 onClick={() => handleSelect(phrase)}
                 className={`p-4 rounded-xl cursor-pointer border transition-all ${
                   selected?.id === phrase.id
-                    ? "border-brand-primary bg-surface-bg"
-                    : "border-surface-border hover:bg-surface-bg"
+                    ? "border-brand-primary bg-brand-faint/20"
+                    : "border-surface-border bg-surface-card hover:border-brand-primary hover:bg-surface-panel"
                 }`}
               >
                 <div className="flex items-center gap-2 mb-1">

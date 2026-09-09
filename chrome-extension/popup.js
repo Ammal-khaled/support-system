@@ -1,12 +1,26 @@
 const form = document.getElementById("login");
 const statusText = document.getElementById("status");
 const logout = document.getElementById("logout");
+const callTools = document.getElementById("call-tools");
+const callStatus = document.getElementById("call-status");
+const endCall = document.getElementById("end-call");
+
+function refreshCallStatus() {
+  chrome.runtime.sendMessage({ type: "GET_CALL_STATUS" }, (response) => {
+    if (chrome.runtime.lastError) return;
+    callStatus.textContent = response?.status === "ready"
+      ? `${response.characters.toLocaleString()} transcript characters captured.`
+      : "No transcript captured yet.";
+  });
+}
 
 async function renderSession() {
   const { authSession } = await chrome.storage.session.get("authSession");
   form.hidden = Boolean(authSession);
   logout.hidden = !authSession;
+  callTools.hidden = !authSession;
   statusText.textContent = authSession ? `Signed in as ${authSession.name}` : "Sign in with your AquaDesk account.";
+  if (authSession) refreshCallStatus();
 }
 
 form.addEventListener("submit", async (event) => {
@@ -31,5 +45,18 @@ form.addEventListener("submit", async (event) => {
 logout.addEventListener("click", async () => {
   await chrome.storage.session.remove("authSession");
   await renderSession();
+});
+
+endCall.addEventListener("click", () => {
+  endCall.disabled = true;
+  callStatus.textContent = "Sending the complete transcript for analysis...";
+  chrome.runtime.sendMessage({ type: "END_CALL_ANALYSIS" }, (response) => {
+    endCall.disabled = false;
+    if (chrome.runtime.lastError || response?.status === "error") {
+      callStatus.textContent = response?.message || "Unable to complete the after-call analysis.";
+      return;
+    }
+    callStatus.textContent = "After-call report saved for Team Lead and Quality.";
+  });
 });
 renderSession();

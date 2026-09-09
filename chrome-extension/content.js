@@ -1,4 +1,6 @@
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition;
+let isRecognitionRunning = false;
 
 function escapeHtml(value) {
   return String(value || "").replace(/[&<>'"]/g, (character) => ({
@@ -43,8 +45,25 @@ chrome.runtime.onMessage.addListener((request) => {
   console.log("CSR Support Extension: soft-skill flag logged without interrupting the agent.", request);
 });
 
-if (SpeechRecognition) {
-  const recognition = new SpeechRecognition();
+async function hasExtensionSession() {
+  const { authSession } = await chrome.storage.session.get("authSession");
+  return Boolean(authSession?.refreshToken);
+}
+
+async function startRecognitionIfSignedIn() {
+  if (!SpeechRecognition) {
+    console.error("Speech Recognition is not supported in this browser.");
+    return;
+  }
+
+  if (!(await hasExtensionSession())) {
+    console.warn("CSR Support Extension: sign in to the extension before call monitoring starts.");
+    return;
+  }
+
+  if (isRecognitionRunning) return;
+
+  recognition = new SpeechRecognition();
 
   // Keep listening continuously
   recognition.continuous = true;
@@ -73,12 +92,17 @@ if (SpeechRecognition) {
 
   recognition.onerror = (event) => {
     console.error("CSR Extension Speech Recognition Error:", event.error);
+    isRecognitionRunning = false;
   };
 
   // Restart automatically if it drops
-  recognition.onend = () => {
+  recognition.onend = async () => {
+    isRecognitionRunning = false;
+    if (!(await hasExtensionSession())) return;
+
     try {
       recognition.start();
+      isRecognitionRunning = true;
     } catch (error) {
       console.error("CSR Extension Speech Recognition Restart Error:", error);
     }
@@ -87,10 +111,17 @@ if (SpeechRecognition) {
   // Start listening immediately when the Maqsam page loads
   try {
     recognition.start();
+    isRecognitionRunning = true;
     console.log("CSR Support Extension: Web Speech API is actively listening to the microphone.");
   } catch (error) {
+    isRecognitionRunning = false;
     console.error("CSR Extension Speech Recognition Start Error:", error);
   }
-} else {
-  console.error("Speech Recognition is not supported in this browser.");
 }
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "session" || !changes.authSession?.newValue) return;
+  startRecognitionIfSignedIn();
+});
+
+startRecognitionIfSignedIn();

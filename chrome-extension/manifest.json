@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Chrome extension companion for the CSR Support System dashboard.",
   "permissions": ["activeTab", "scripting", "storage"],
-  "host_permissions": ["https://firestore.googleapis.com/*", "https://identitytoolkit.googleapis.com/*", "https://securetoken.googleapis.com/*"],
+  "host_permissions": ["https://firestore.googleapis.com/*", "https://identitytoolkit.googleapis.com/*", "https://securetoken.googleapis.com/*", "https://aquadesk-ai.aquadesk-support.workers.dev/*"],
   "background": {
     "service_worker": "background.js"
   },

@@ -10,16 +10,17 @@ initializeApp({
 const auth = getAuth();
 const db = getFirestore();
 
+const demoPassword = process.env.AQUADESK_DEMO_PASSWORD;
+const shouldResetExistingPasswords = process.env.AQUADESK_RESET_DEMO_PASSWORDS === "true";
+
 const users = [
   {
     email: "lead@aquadesk.local",
-    password: "AquaDesk@2026!",
     name: "Aquacool Team Lead",
     role: "team_lead",
   },
   {
     email: "agent@aquadesk.local",
-    password: "AquaDesk@2026!",
     name: "Aquacool Agent",
     role: "agent",
   },
@@ -30,17 +31,22 @@ async function ensureUser(user) {
 
   try {
     authUser = await auth.getUserByEmail(user.email);
-    await auth.updateUser(authUser.uid, {
-      password: user.password,
+    const updates = {
       displayName: user.name,
       disabled: false,
-    });
+    };
+
+    if (shouldResetExistingPasswords) {
+      updates.password = demoPassword;
+    }
+
+    await auth.updateUser(authUser.uid, updates);
   } catch (error) {
     if (error.code !== "auth/user-not-found") throw error;
 
     authUser = await auth.createUser({
       email: user.email,
-      password: user.password,
+      password: demoPassword,
       displayName: user.name,
       disabled: false,
     });
@@ -61,14 +67,23 @@ async function ensureUser(user) {
 }
 
 async function ensureDemoUsers() {
+  if (!demoPassword) {
+    throw new Error(
+      "Set AQUADESK_DEMO_PASSWORD before creating demo users. This script no longer stores a shared demo password."
+    );
+  }
+
   console.log("Creating AquaDesk demo users...");
+  if (!shouldResetExistingPasswords) {
+    console.log("Existing user passwords will not be changed. Set AQUADESK_RESET_DEMO_PASSWORDS=true to rotate them.");
+  }
 
   for (const user of users) {
     const result = await ensureUser(user);
     console.log(`Ready: ${result.email} (${result.role})`);
   }
 
-  console.log("Done. Password for both users: AquaDesk@2026!");
+  console.log("Done. Demo password came from AQUADESK_DEMO_PASSWORD.");
 }
 
 ensureDemoUsers()

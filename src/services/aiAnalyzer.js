@@ -38,14 +38,17 @@ function extractJson(text) {
 }
 
 function normalizeResult(result) {
+  const feedback = result.feedback || result.softSkills?.feedback;
   return {
-    isCompliant: Boolean(result.isCompliant),
-    feedback: String(result.feedback || "Review this interaction for empathy and ownership."),
+    isCompliant: typeof result.isCompliant === "boolean"
+      ? result.isCompliant
+      : result.overallStatus === "clear",
+    feedback: String(feedback || result.summary || "Review this interaction for empathy and ownership."),
     severity: "soft_skill",
   };
 }
 
-export async function analyzeSoftSkills(transcriptSnippet) {
+export async function analyzeSoftSkills(transcriptSnippet, context = {}) {
   if (typeof transcriptSnippet !== "string" || !transcriptSnippet.trim()) {
     throw new Error("Transcript snippet is required.");
   }
@@ -61,7 +64,12 @@ export async function analyzeSoftSkills(transcriptSnippet) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ transcriptSnippet: transcriptSnippet.trim() }),
+      body: JSON.stringify({
+        transcriptSnippet: transcriptSnippet.trim(),
+        bannedPhrases: Array.isArray(context.bannedPhrases) ? context.bannedPhrases : [],
+        kbArticles: Array.isArray(context.kbArticles) ? context.kbArticles : [],
+        qualityFlags: Array.isArray(context.qualityFlags) ? context.qualityFlags : [],
+      }),
     }
   );
 

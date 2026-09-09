@@ -5,6 +5,13 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 
+function destinationForRole(role) {
+  if (role === "team_lead") return "/team-lead";
+  if (role === "quality_supervisor") return "/quality";
+  if (role === "disabled") return "/login";
+  return "/agent";
+}
+
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,7 +23,11 @@ export default function Login() {
   useEffect(() => {
     if (!loading && currentUser) {
       const role = userProfile?.role;
-      navigate(role === "team_lead" ? "/team-lead" : "/agent", { replace: true });
+      if (role === "disabled" || userProfile?.disabled) {
+        setError("This account has been deactivated. Contact your team lead.");
+        return;
+      }
+      navigate(destinationForRole(role), { replace: true });
     }
   }, [currentUser, loading, userProfile, navigate]);
 
@@ -35,10 +46,15 @@ export default function Login() {
 
     const userDoc = await getDoc(doc(db, "users", user.uid));
     const profile = userDoc.exists() ? userDoc.data() : { role: "agent" };
+    if (profile.role === "disabled" || profile.disabled) {
+      setError("This account has been deactivated. Contact your team lead.");
+      setSubmitting(false);
+      return;
+    }
     if (profile.mustChangePassword) {
       navigate("/change-password");
     } else {
-      navigate(profile.role === "team_lead" ? "/team-lead" : "/agent");
+      navigate(destinationForRole(profile.role));
     }
     setSubmitting(false);
   };
