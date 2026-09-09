@@ -14,16 +14,31 @@ import {
 } from "../services/firestore";
 
 const STARTER_LIBRARY_STORAGE_KEY = "aquadesk_starter_library_hidden";
-const BASE_MANAGEMENT_TABS = ["Summary", "After-Call Reports", "Support Requests", "Support Topics", "Knowledge"];
 
-function Metric({ label, value, tone = "text-current", destination, onClick }) {
+const BASE_MANAGEMENT_TABS = [
+  "Summary",
+  "After-Call Reports",
+  "Support Requests",
+  "Support Topics",
+  "Knowledge",
+];
+
+function Metric({
+  label,
+  value,
+  tone = "text-current",
+  destination,
+  onClick,
+}) {
   const clickable = typeof onClick === "function";
+
   const content = (
     <>
       <div>
         <p className="label-field mb-6">{label}</p>
         <p className={`metric-value ${tone}`}>{value}</p>
       </div>
+
       {destination && (
         <p className="mt-4 text-xs font-extrabold uppercase tracking-[0.14em] text-semantic-neutral">
           Open {destination}
@@ -55,14 +70,19 @@ export default function TeamLeadDashboard() {
   const [managementTab, setManagementTab] = useState("Summary");
   const [flagFilter, setFlagFilter] = useState("all");
   const [managementQuery, setManagementQuery] = useState("");
+
   const [articles, setArticles] = useState([]);
   const [flags, setFlags] = useState([]);
   const [actions, setActions] = useState([]);
+
   const [showSetupTools, setShowSetupTools] = useState(
-    () => window.localStorage.getItem(STARTER_LIBRARY_STORAGE_KEY) !== "true"
+    () =>
+      window.localStorage.getItem(STARTER_LIBRARY_STORAGE_KEY) !== "true"
   );
+
   const [error, setError] = useState("");
 
+  // Knowledge Base listener
   useEffect(() => {
     const unsubscribe = onSnapshot(
       collection(db, "knowledge_base"),
@@ -71,6 +91,7 @@ export default function TeamLeadDashboard() {
           id: articleDoc.id,
           ...articleDoc.data(),
         }));
+
         setArticles(kbData);
         setError("");
       },
@@ -82,6 +103,7 @@ export default function TeamLeadDashboard() {
     return () => unsubscribe();
   }, []);
 
+  // Flags and Support Requests listeners
   useEffect(() => {
     const unsubscribeFlags = subscribeFlags(setFlags);
     const unsubscribeActions = subscribeAgentActions(setActions);
@@ -92,31 +114,61 @@ export default function TeamLeadDashboard() {
     };
   }, []);
 
+  // Dashboard metrics
   const missionStats = useMemo(() => {
     const activeFlags = flags.filter((flag) => !flag.reviewed);
+
+    // Only count requests that are NOT resolved
+    const openSupportRequests = actions.filter((action) => {
+      const status = String(action.status || "open")
+        .trim()
+        .toLowerCase();
+
+      return status !== "resolved";
+    });
+
     return {
       activeFlags: activeFlags.length,
-      criticalFlags: activeFlags.filter((flag) => flag.type === "critical").length,
-      softSkillFlags: activeFlags.filter((flag) => flag.type === "soft_skill").length,
-      supportRequests: actions.filter(   (action) => (action.status || "open") !== "resolved" ).length,
+
+      criticalFlags: activeFlags.filter(
+        (flag) => flag.type === "critical"
+      ).length,
+
+      softSkillFlags: activeFlags.filter(
+        (flag) => flag.type === "soft_skill"
+      ).length,
+
+      supportRequests: openSupportRequests.length,
+
       kbArticles: articles.length,
     };
   }, [actions, articles, flags]);
 
   const managementTabs = useMemo(
-    () => showSetupTools ? [...BASE_MANAGEMENT_TABS, "Setup Tools"] : BASE_MANAGEMENT_TABS,
+    () =>
+      showSetupTools
+        ? [...BASE_MANAGEMENT_TABS, "Setup Tools"]
+        : BASE_MANAGEMENT_TABS,
     [showSetupTools]
   );
 
   const handleSetupComplete = () => {
-    window.localStorage.setItem(STARTER_LIBRARY_STORAGE_KEY, "true");
+    window.localStorage.setItem(
+      STARTER_LIBRARY_STORAGE_KEY,
+      "true"
+    );
+
     setShowSetupTools(false);
+
     if (managementTab === "Setup Tools") {
       setManagementTab("Summary");
     }
   };
 
-  const openManagementTab = (tab, nextFlagFilter = "all") => {
+  const openManagementTab = (
+    tab,
+    nextFlagFilter = "all"
+  ) => {
     setManagementTab(tab);
     setFlagFilter(nextFlagFilter);
   };
@@ -129,81 +181,109 @@ export default function TeamLeadDashboard() {
         <div className="mx-auto max-w-7xl">
           <header className="mb-8 border-b border-surface-border pb-8">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="label-field">
-                Mission Control
-              </p>
-              <h1 className="page-title">
-                Team Lead Configuration
-              </h1>
-              <p className="page-subtitle">
-                Monitor support requests, open quality signals, and after-call AI reports for coaching follow-up.
-              </p>
-            </div>
+              <div>
+                <p className="label-field">
+                  Mission Control
+                </p>
 
-            <div className="hidden lg:block text-right">
-              <p className="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">
-                Tier 1: keyword matching
-              </p>
-              <p className="font-mono text-xs uppercase tracking-[0.18em] text-brand-primary mt-2">
-                Tier 2: AI coaching
-              </p>
-            </div>
+                <h1 className="page-title">
+                  Team Lead Configuration
+                </h1>
+
+                <p className="page-subtitle">
+                  Monitor support requests, open quality signals,
+                  and after-call AI reports for coaching follow-up.
+                </p>
+              </div>
+
+              <div className="hidden text-right lg:block">
+                <p className="font-mono text-xs uppercase tracking-[0.18em] text-slate-500">
+                  Tier 1: keyword matching
+                </p>
+
+                <p className="mt-2 font-mono text-xs uppercase tracking-[0.18em] text-brand-primary">
+                  Tier 2: AI coaching
+                </p>
+              </div>
             </div>
           </header>
 
+          {/* Dashboard Metrics */}
           <section className="metric-grid mb-8 grid gap-3">
             <Metric
               label="Active Flags"
               value={missionStats.activeFlags}
               tone="text-brand-primary"
               destination="Summary"
-              onClick={() => openManagementTab("Summary")}
+              onClick={() =>
+                openManagementTab("Summary")
+              }
             />
+
             <Metric
               label="Critical"
               value={missionStats.criticalFlags}
               tone="text-semantic-error"
               destination="Summary"
-              onClick={() => openManagementTab("Summary", "critical")}
+              onClick={() =>
+                openManagementTab(
+                  "Summary",
+                  "critical"
+                )
+              }
             />
+
             <Metric
               label="Soft Skill"
               value={missionStats.softSkillFlags}
               tone="text-semantic-warning"
               destination="Summary"
-              onClick={() => openManagementTab("Summary", "soft_skill")}
+              onClick={() =>
+                openManagementTab(
+                  "Summary",
+                  "soft_skill"
+                )
+              }
             />
+
             <Metric
               label="Support Requests"
               value={missionStats.supportRequests}
               tone="text-semantic-success"
               destination="Support Requests"
-              onClick={() => openManagementTab("Support Requests")}
+              onClick={() =>
+                openManagementTab(
+                  "Support Requests"
+                )
+              }
             />
+
             <Metric
               label="KB Articles"
               value={missionStats.kbArticles}
               destination="Knowledge"
-              onClick={() => openManagementTab("Knowledge")}
+              onClick={() =>
+                openManagementTab("Knowledge")
+              }
             />
           </section>
 
           {error && (
-            <div
-              className="mb-6 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-semantic-error"
-            >
+            <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-semantic-error">
               {error}
             </div>
           )}
 
+          {/* Navigation Tabs */}
           <section className="mb-6">
             <div className="admin-tab-shell">
               {managementTabs.map((item) => (
                 <button
                   key={item}
                   type="button"
-                  onClick={() => openManagementTab(item)}
+                  onClick={() =>
+                    openManagementTab(item)
+                  }
                   className={`admin-tab ${
                     managementTab === item
                       ? "admin-tab-active"
@@ -216,14 +296,26 @@ export default function TeamLeadDashboard() {
             </div>
           </section>
 
-          {["Summary", "After-Call Reports", "Support Requests"].includes(managementTab) && (
+          {/* Search */}
+          {[
+            "Summary",
+            "After-Call Reports",
+            "Support Requests",
+          ].includes(managementTab) && (
             <section className="mb-6 glass-card p-4 sm:p-5">
               <label>
-                <span className="label-field">Search This View</span>
+                <span className="label-field">
+                  Search This View
+                </span>
+
                 <input
                   type="search"
                   value={managementQuery}
-                  onChange={(event) => setManagementQuery(event.target.value)}
+                  onChange={(event) =>
+                    setManagementQuery(
+                      event.target.value
+                    )
+                  }
                   className="input-field mt-2"
                   placeholder="Search by agent, request, flag, report, status, note, or ID..."
                 />
@@ -231,24 +323,69 @@ export default function TeamLeadDashboard() {
             </section>
           )}
 
+          {/* Summary */}
           {managementTab === "Summary" && (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              <FlagsFeed typeFilter={flagFilter} externalSearchQuery={managementQuery} showSearch={false} />
-              <AgentActionsFeed externalSearchQuery={managementQuery} showSearch={false} />
+              <FlagsFeed
+                typeFilter={flagFilter}
+                externalSearchQuery={
+                  managementQuery
+                }
+                showSearch={false}
+              />
+
+              <AgentActionsFeed
+                externalSearchQuery={
+                  managementQuery
+                }
+                showSearch={false}
+              />
             </div>
           )}
 
-          {managementTab === "After-Call Reports" && <AfterCallReportsFeed externalSearchQuery={managementQuery} showSearch={false} />}
-
-          {managementTab === "Support Requests" && <AgentActionsFeed externalSearchQuery={managementQuery} showSearch={false} />}
-
-          {managementTab === "Support Topics" && <ActionTypesManager />}
-
-          {managementTab === "Knowledge" && <KnowledgeBaseForm />}
-
-          {managementTab === "Setup Tools" && showSetupTools && (
-            <StarterLibrarySetup articles={articles} onComplete={handleSetupComplete} />
+          {/* After Call Reports */}
+          {managementTab ===
+            "After-Call Reports" && (
+            <AfterCallReportsFeed
+              externalSearchQuery={
+                managementQuery
+              }
+              showSearch={false}
+            />
           )}
+
+          {/* Support Requests */}
+          {managementTab ===
+            "Support Requests" && (
+            <AgentActionsFeed
+              externalSearchQuery={
+                managementQuery
+              }
+              showSearch={false}
+            />
+          )}
+
+          {/* Support Topics */}
+          {managementTab ===
+            "Support Topics" && (
+            <ActionTypesManager />
+          )}
+
+          {/* Knowledge */}
+          {managementTab === "Knowledge" && (
+            <KnowledgeBaseForm />
+          )}
+
+          {/* Setup Tools */}
+          {managementTab === "Setup Tools" &&
+            showSetupTools && (
+              <StarterLibrarySetup
+                articles={articles}
+                onComplete={
+                  handleSetupComplete
+                }
+              />
+            )}
         </div>
       </main>
     </div>
