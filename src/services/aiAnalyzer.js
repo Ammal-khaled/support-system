@@ -1,4 +1,9 @@
-const AI_WORKER_URL = process.env.REACT_APP_AI_WORKER_URL || "";
+// In production, route AI requests through Netlify so the browser never connects
+// directly to workers.dev. This avoids local/corporate certificate blocks and CORS issues.
+const AI_WORKER_URL =
+  process.env.NODE_ENV === "production"
+    ? "/api/ai"
+    : process.env.REACT_APP_AI_WORKER_URL || "";
 
 const SOFT_SKILL_RULES = [
   {
