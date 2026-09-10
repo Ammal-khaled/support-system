@@ -8,6 +8,20 @@ import FlagsFeed from "../components/FlagsFeed";
 import SoftSkillsEvaluator from "../components/SoftSkillsEvaluator";
 import { subscribeAgentActions, subscribeFlags } from "../services/firestore";
 
+const QUALITY_TAB_PARAMS = {
+  "Review Queue": "review",
+  "Soft Skills": "soft-skills",
+  "Critical Flags": "critical",
+  "After-Call Reports": "reports",
+  "Flag Rules": "rules",
+  "AI Rule Sandbox": "sandbox",
+  "Support Requests": "support",
+};
+
+function getQualityTab(param) {
+  return Object.entries(QUALITY_TAB_PARAMS).find(([, value]) => value === param)?.[0] || "Review Queue";
+}
+
 function QualityMetric({ label, value, tone = "text-current", destination, onClick }) {
   return (
     <button
@@ -25,24 +39,16 @@ function QualityMetric({ label, value, tone = "text-current", destination, onCli
 }
 
 export default function QualityDashboard() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [flags, setFlags] = useState([]);
   const [actions, setActions] = useState([]);
   const [qualityQuery, setQualityQuery] = useState("");
-  const [tab, setTab] = useState(() => {
-    if (searchParams.get("tab") === "support") return "Support Requests";
-    if (searchParams.get("tab") === "reports") return "After-Call Reports";
-    return "Review Queue";
-  });
-
-  useEffect(() => {
-    if (searchParams.get("tab") === "support") {
-      setTab("Support Requests");
-    }
-    if (searchParams.get("tab") === "reports") {
-      setTab("After-Call Reports");
-    }
-  }, [searchParams]);
+  const tab = getQualityTab(searchParams.get("tab"));
+  const setTab = (nextTab) => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("tab", QUALITY_TAB_PARAMS[nextTab]);
+    setSearchParams(nextParams);
+  };
 
   useEffect(() => {
     const unsubscribeFlags = subscribeFlags(setFlags);

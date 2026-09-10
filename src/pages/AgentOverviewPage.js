@@ -366,8 +366,8 @@ function getActivityBuckets(actions, flags, tickets, periodId) {
   } else {
     start.setDate(start.getDate() - (period.days - 1));
   }
-  const countRows = (rows, fields, from, to) => rows.filter((row) => {
-    const rowDate = getDate(row, fields);
+  const countRows = (rows, fields, from, to, datePicker = getDate) => rows.filter((row) => {
+    const rowDate = datePicker(row, fields);
     return rowDate && rowDate >= from && rowDate < to;
   }).length;
 
@@ -377,7 +377,7 @@ function getActivityBuckets(actions, flags, tickets, periodId) {
       from.setHours(hour, 0, 0, 0);
       const to = new Date(from);
       to.setHours(hour + 1);
-      return { label: `${String(hour).padStart(2, "0")}:00`, actions: countRows(actions, ["timestamp"], from, to), flags: countRows(flags, ["timestamp"], from, to), tickets: countRows(tickets, ["createdAt", "updatedAt"], from, to) };
+      return { label: `${String(hour).padStart(2, "0")}:00`, actions: countRows(actions, ["timestamp"], from, to), flags: countRows(flags, ["timestamp"], from, to), tickets: countRows(tickets, ["createdAt", "updatedAt"], from, to, getMostRecentDate) };
     });
     return buckets;
   }
@@ -399,7 +399,7 @@ function getActivityBuckets(actions, flags, tickets, periodId) {
         label: `${fromDay}-${toDay - 1}`,
         actions: countRows(actions, ["timestamp"], from, to),
         flags: countRows(flags, ["timestamp"], from, to),
-        tickets: countRows(tickets, ["createdAt", "updatedAt"], from, to),
+        tickets: countRows(tickets, ["createdAt", "updatedAt"], from, to, getMostRecentDate),
       };
     });
   }
@@ -415,7 +415,7 @@ function getActivityBuckets(actions, flags, tickets, periodId) {
         : from.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
       actions: countRows(actions, ["timestamp"], from, to),
       flags: countRows(flags, ["timestamp"], from, to),
-      tickets: countRows(tickets, ["createdAt", "updatedAt"], from, to),
+      tickets: countRows(tickets, ["createdAt", "updatedAt"], from, to, getMostRecentDate),
     };
   });
   return buckets;

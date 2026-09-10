@@ -6,36 +6,42 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function activeUser() {
+      return signedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.disabled != true
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role != 'disabled';
+    }
+
     function callerRole() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
     function isTeamLead() {
-      return signedIn() && callerRole() == 'team_lead';
+      return activeUser() && callerRole() == 'team_lead';
     }
 
     function canReview() {
-      return signedIn() && callerRole() in ['team_lead', 'quality_supervisor'];
+      return activeUser() && callerRole() in ['team_lead', 'quality_supervisor'];
     }
 
     function ownsExistingAgentRecord() {
-      return signedIn() && resource.data.agentId == request.auth.uid;
+      return activeUser() && resource.data.agentId == request.auth.uid;
     }
 
     function ownsIncomingAgentRecord() {
-      return signedIn() && request.resource.data.agentId == request.auth.uid;
+      return activeUser() && request.resource.data.agentId == request.auth.uid;
     }
 
     function ownsExistingTicket() {
-      return signedIn() && resource.data.createdById == request.auth.uid;
+      return activeUser() && resource.data.createdById == request.auth.uid;
     }
 
     function ownsIncomingTicket() {
-      return signedIn() && request.resource.data.createdById == request.auth.uid;
+      return activeUser() && request.resource.data.createdById == request.auth.uid;
     }
 
     match /banned_phrases/{document} {
-      allow read: if signedIn();
+      allow read: if activeUser();
       allow write: if canReview();
     }
 
@@ -55,13 +61,12 @@ service cloud.firestore {
     match /tickets/{document} {
       allow create: if ownsIncomingTicket();
       allow read: if canReview() || ownsExistingTicket();
-      allow update: if canReview()
-        || (ownsExistingTicket() && request.resource.data.createdById == request.auth.uid);
+      allow update: if canReview();
     }
 
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || canReview());
-      allow update: if signedIn()
+      allow read: if activeUser() && (request.auth.uid == uid || canReview());
+      allow update: if activeUser()
         && request.auth.uid == uid
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['mustChangePassword', 'passwordChangedAt', 'updatedAt']);
