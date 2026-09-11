@@ -18,6 +18,7 @@ export default function CreateUser() {
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [editingUser, setEditingUser] = useState(null);
   const [editForm, setEditForm] = useState({ name: "", email: "", role: "agent", disabled: false });
+  const [editingEmail, setEditingEmail] = useState("");
   const [savingUserId, setSavingUserId] = useState(null);
   const [userView, setUserView] = useState("active");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -29,6 +30,19 @@ export default function CreateUser() {
     if (value === "disabled") return "Hidden";
     return "Agent";
   };
+
+  const looksLikeEmail = (value) =>
+    typeof value === "string" && value.includes("@");
+
+  const getUserEmail = (user) =>
+    user.email ||
+    user.emailAddress ||
+    user.authEmail ||
+    user.loginEmail ||
+    (looksLikeEmail(user.name) ? user.name : "");
+
+  const getUserDisplayName = (user) =>
+    user.name || getUserEmail(user) || "Unnamed User";
 
   useEffect(() => {
     const unsubscribe = subscribeUsers(
@@ -86,16 +100,6 @@ export default function CreateUser() {
     }
   };
 
-  const openUserEditor = (user) => {
-    setEditingUser(user);
-    setEditForm({
-      name: user.name || "",
-      email: user.email || "",
-      role: user.role === "disabled" ? user.previousRole || "agent" : user.role || "agent",
-      disabled: Boolean(user.disabled),
-    });
-  };
-
   const handleUpdateUser = async (event) => {
     event.preventDefault();
     if (!editingUser) return;
@@ -104,15 +108,23 @@ export default function CreateUser() {
     setMessage("");
 
     try {
-      await updateUserProfile(editingUser.id, {
+      const nextEmail = editingEmail.trim() || editForm.email.trim() || getUserEmail(editingUser);
+
+      const updates = {
         name: editForm.name.trim(),
-        email: editForm.email.trim(),
         role: editForm.disabled ? "disabled" : editForm.role,
         previousRole: editForm.disabled ? editForm.role : "",
         disabled: editForm.disabled,
-      });
-      setMessage(`Updated ${editForm.name || editForm.email}.`);
+      };
+
+      if (nextEmail) {
+        updates.email = nextEmail;
+      }
+
+      await updateUserProfile(editingUser.id, updates);
+      setMessage(`Updated ${editForm.name || nextEmail}.`);
       setEditingUser(null);
+      setEditingEmail("");
     } catch (updateError) {
       console.error(updateError);
       setError("Failed to update user profile.");
@@ -122,7 +134,7 @@ export default function CreateUser() {
   };
 
   const handleDeactivateUser = async (user) => {
-    if (!window.confirm(`Deactivate ${user.name || user.email}? This removes portal access in AquaDesk but does not delete the Firebase Auth login.`)) return;
+    if (!window.confirm(`Deactivate ${getUserDisplayName(user)}? This removes portal access in AquaDesk but does not delete the Firebase Auth login.`)) return;
     setSavingUserId(user.id);
     setError("");
 
@@ -132,7 +144,7 @@ export default function CreateUser() {
         previousRole: user.role === "disabled" ? user.previousRole || "agent" : user.role || "agent",
         disabled: true,
       });
-      setMessage(`Deactivated ${user.name || user.email}.`);
+      setMessage(`Deactivated ${getUserDisplayName(user)}.`);
     } catch (deactivateError) {
       console.error(deactivateError);
       setError("Failed to deactivate user profile.");
@@ -151,7 +163,7 @@ export default function CreateUser() {
         previousRole: "",
         disabled: false,
       });
-      setMessage(`Reactivated ${user.name || user.email}.`);
+      setMessage(`Reactivated ${getUserDisplayName(user)}.`);
     } catch (reactivateError) {
       console.error(reactivateError);
       setError("Failed to reactivate user profile.");
@@ -169,7 +181,7 @@ export default function CreateUser() {
     const matchesSearch = !search || [
       user.id,
       user.name,
-      user.email,
+      getUserEmail(user),
       roleLabel(effectiveRole),
       effectiveRole,
     ].some((field) => String(field || "").toLowerCase().includes(search));
@@ -312,12 +324,15 @@ export default function CreateUser() {
               <p className="text-semantic-neutral">No {userView} users match this filter.</p>
             ) : (
               <div className="space-y-3">
-                {visibleUsers.map((user) => (
+                {visibleUsers.map((user) => {
+                  const displayEmail = getUserEmail(user);
+
+                  return (
                   <article key={user.id} className="rounded-xl border border-surface-border bg-surface-bg p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
-                        <p className="font-bold text-slate-950">{user.name || "Unnamed User"}</p>
-                        <p className="text-sm text-semantic-neutral">{user.email}</p>
+                        <p className="font-bold text-slate-950">{getUserDisplayName(user)}</p>
+                        <p className="text-sm text-semantic-neutral" data-user-email>{displayEmail || "No email on profile"}</p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           <span className="rounded-full border border-surface-border bg-surface-card px-2.5 py-1 text-xs font-bold uppercase tracking-[0.12em] text-semantic-neutral">
                             {roleLabel(user.role === "disabled" ? user.previousRole || "agent" : user.role)}
@@ -330,7 +345,29 @@ export default function CreateUser() {
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={() => openUserEditor(user)} className="rounded-xl border border-surface-border bg-surface-card px-3 py-2 text-sm font-semibold text-slate-900 hover:border-brand-primary">
+                        <button
+                          type="button"
+                          data-profile-email={displayEmail}
+                          onClick={(event) => {
+                            const profileEmail = event.currentTarget.getAttribute("data-profile-email") || displayEmail;
+                            const profileName = user.name || profileEmail;
+                            const profileRole = user.role === "disabled" ? user.previousRole || "agent" : user.role || "agent";
+
+                            setEditingUser({
+                              ...user,
+                              name: profileName,
+                              email: profileEmail,
+                            });
+                            setEditingEmail(profileEmail);
+                            setEditForm({
+                              name: profileName,
+                              email: profileEmail,
+                              role: profileRole,
+                              disabled: Boolean(user.disabled),
+                            });
+                          }}
+                          className="rounded-xl border border-surface-border bg-surface-card px-3 py-2 text-sm font-semibold text-slate-900 hover:border-brand-primary"
+                        >
                           Edit
                         </button>
                         <button type="button" disabled={savingUserId === user.id || user.disabled} onClick={() => handleDeactivateUser(user)} className="rounded-xl bg-semantic-error px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
@@ -344,7 +381,8 @@ export default function CreateUser() {
                       </div>
                     </div>
                   </article>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -360,7 +398,7 @@ export default function CreateUser() {
                 <h2 className="text-xl font-extrabold text-slate-950">Edit User</h2>
                 <p className="text-sm text-semantic-neutral">Update the AquaDesk profile and role.</p>
               </div>
-              <button type="button" onClick={() => setEditingUser(null)} className="rounded-full px-3 py-2 text-sm font-bold text-semantic-neutral hover:bg-surface-panel">
+              <button type="button" onClick={() => { setEditingUser(null); setEditingEmail(""); }} className="rounded-full px-3 py-2 text-sm font-bold text-semantic-neutral hover:bg-surface-panel">
                 Close
               </button>
             </div>
@@ -368,11 +406,13 @@ export default function CreateUser() {
             <div className="space-y-4">
               <div>
                 <label className="label-field">Full Name</label>
-                <input value={editForm.name} onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))} className="input-field" required />
+                <input value={editForm.name || getUserDisplayName(editingUser)} onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))} className="input-field" required />
               </div>
               <div>
                 <label className="label-field">Email Address</label>
-                <input type="email" value={editForm.email} onChange={(event) => setEditForm((current) => ({ ...current, email: event.target.value }))} className="input-field" required />
+                <div className="rounded-xl border border-surface-border bg-surface-bg px-4 py-3 text-sm font-semibold text-semantic-neutral">
+                  Email stays unchanged for this account.
+                </div>
               </div>
               <div>
                 <label className="label-field">System Role</label>
@@ -397,7 +437,7 @@ export default function CreateUser() {
             </div>
 
             <div className="mt-6 flex justify-end gap-2">
-              <button type="button" onClick={() => setEditingUser(null)} className="btn-secondary px-4 text-sm font-bold">
+              <button type="button" onClick={() => { setEditingUser(null); setEditingEmail(""); }} className="btn-secondary px-4 text-sm font-bold">
                 Cancel
               </button>
               <button type="submit" disabled={savingUserId === editingUser.id} className="btn-primary px-6 text-sm">

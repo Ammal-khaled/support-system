@@ -24,6 +24,12 @@ const PERIODS = [
   { id: "month", label: "This Month", days: 30 },
 ];
 const TABS = ["Overview", "Mistakes", "Support Requests", "Agents", "Tickets"];
+const TICKET_STATUSES = ["Open", "In Progress", "Waiting Customer", "Escalated", "Resolved", "Closed"];
+const TICKET_STATUS_LABELS = new Map(TICKET_STATUSES.map((status) => [status.toLowerCase(), status]));
+
+function normalizeTicketStatus(status) {
+  return TICKET_STATUS_LABELS.get(String(status || "").trim().toLowerCase()) || "Open";
+}
 
 function getDate(row, fields) {
   const value = fields.map((field) => row[field]).find(Boolean);
@@ -851,7 +857,7 @@ export default function AgentOverviewPage() {
   const repeatedMistakes = countBy(displayFlags, (flag) => flag.matchedPhrase || "Review needed");
   const actionTrends = countBy(displayActions, (action) => action.actionType || "Unlabeled Support Request");
   const ticketDepartmentTrends = countBy(displayTickets, (ticket) => ticket.department || "General");
-  const ticketStatusTrends = countBy(displayTickets, (ticket) => ticket.status || "Open");
+  const ticketStatusTrends = countBy(displayTickets, (ticket) => normalizeTicketStatus(ticket.status));
   const ticketTitleTrends = countBy(displayTickets, (ticket) => ticket.title || "Untitled Ticket");
   const activityBuckets = getActivityBuckets(displayActions, displayFlags, displayTickets, period);
 
@@ -1420,7 +1426,7 @@ export default function AgentOverviewPage() {
                 >
                   <p className="font-extrabold text-slate-950">{ticket.title || "Untitled Ticket"}</p>
                   <p className="mt-1 text-sm text-semantic-neutral">
-                    {ticket.department || "General"} · {ticket.status || "Open"} · {getAgentName(ticket)}
+                    {ticket.department || "General"} · {normalizeTicketStatus(ticket.status)} · {getAgentName(ticket)}
                   </p>
                   <p className="mt-3 text-xs font-extrabold uppercase tracking-[0.12em] text-brand-primary">
                     Open ticket

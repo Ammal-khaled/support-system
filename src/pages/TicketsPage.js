@@ -30,6 +30,11 @@ const DEPARTMENTS = [
 
 const PRIORITIES = ["Low", "Medium", "High", "Urgent"];
 const STATUSES = ["Open", "In Progress", "Waiting Customer", "Escalated", "Resolved", "Closed"];
+const STATUS_LABELS = new Map(STATUSES.map((status) => [status.toLowerCase(), status]));
+
+function normalizeStatus(status) {
+  return STATUS_LABELS.get(String(status || "").trim().toLowerCase()) || "Open";
+}
 
 function formatTimestamp(timestamp) {
   if (!timestamp?.toDate) return "Pending";
@@ -37,9 +42,10 @@ function formatTimestamp(timestamp) {
 }
 
 function statusTone(status) {
-  if (status === "Resolved" || status === "Closed") return "text-semantic-success bg-semantic-success/15";
-  if (status === "Escalated" || status === "Urgent") return "text-semantic-error bg-semantic-error/15";
-  if (status === "Waiting Customer") return "text-semantic-warning bg-semantic-warning/15";
+  const normalizedStatus = normalizeStatus(status);
+  if (normalizedStatus === "Resolved" || normalizedStatus === "Closed") return "text-semantic-success bg-semantic-success/15";
+  if (normalizedStatus === "Escalated" || normalizedStatus === "Urgent") return "text-semantic-error bg-semantic-error/15";
+  if (normalizedStatus === "Waiting Customer") return "text-semantic-warning bg-semantic-warning/15";
   return "text-brand-primary bg-brand-faint";
 }
 
@@ -105,7 +111,8 @@ export default function TicketsPage() {
     const search = query.trim().toLowerCase();
 
     return tickets.filter((ticket) => {
-      const matchesStatus = statusFilter === "All" || ticket.status === statusFilter;
+      const ticketStatus = normalizeStatus(ticket.status);
+      const matchesStatus = statusFilter === "All" || ticketStatus === statusFilter;
       const matchesOwner = canViewTeam || ticket.createdById === currentUser?.uid;
       const matchesActiveProfile = !canViewTeam || !ticket.createdById || !inactiveUserIds.has(ticket.createdById);
       const matchesSearch =
@@ -165,11 +172,11 @@ export default function TicketsPage() {
 
     return {
       total: mineOrTeam.length,
-      open: mineOrTeam.filter((ticket) => ticket.status === "Open").length,
+      open: mineOrTeam.filter((ticket) => normalizeStatus(ticket.status) === "Open").length,
       active: mineOrTeam.filter((ticket) =>
-        ["In Progress", "Waiting Customer", "Escalated"].includes(ticket.status)
+        ["In Progress", "Waiting Customer", "Escalated"].includes(normalizeStatus(ticket.status))
       ).length,
-      resolved: mineOrTeam.filter((ticket) => ["Resolved", "Closed"].includes(ticket.status)).length,
+      resolved: mineOrTeam.filter((ticket) => ["Resolved", "Closed"].includes(normalizeStatus(ticket.status))).length,
     };
   }, [canViewTeam, currentUser?.uid, inactiveUserIds, tickets]);
 
@@ -235,17 +242,27 @@ export default function TicketsPage() {
     setError("");
 
     try {
-      await updateTicket(selectedTicket.id, {
+      const updatedTicket = {
         ...draft,
         title: draft.title.trim(),
         customerName: draft.customerName.trim(),
         customerPhone: draft.customerPhone.trim(),
         accountNumber: draft.accountNumber.trim(),
+        status: normalizeStatus(draft.status),
         description: draft.description.trim(),
         nextAction: draft.nextAction.trim(),
         lastEditedById: currentUser?.uid || "",
         lastEditedByName: agentName,
-      });
+      };
+
+      await updateTicket(selectedTicket.id, updatedTicket);
+      setTickets((currentTickets) =>
+        currentTickets.map((ticket) =>
+          ticket.id === selectedTicket.id
+            ? { ...ticket, ...updatedTicket, updatedAt: { toDate: () => new Date() } }
+            : ticket
+        )
+      );
       setMessage("Ticket updated.");
       setIsEditorOpen(false);
       window.setTimeout(() => setMessage(""), 2200);

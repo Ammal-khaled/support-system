@@ -6,14 +6,11 @@ import ActionTypesManager from "../components/ActionTypesManager";
 import AgentActionsFeed from "../components/AgentActionsFeed";
 import FlagsFeed from "../components/FlagsFeed";
 import KnowledgeBaseForm from "../components/KnowledgeBaseForm";
-import StarterLibrarySetup from "../components/StarterLibrarySetup";
 import AfterCallReportsFeed from "../components/AfterCallReportsFeed";
 import {
   subscribeAgentActions,
   subscribeFlags,
 } from "../services/firestore";
-
-const STARTER_LIBRARY_STORAGE_KEY = "aquadesk_starter_library_hidden";
 
 const BASE_MANAGEMENT_TABS = [
   "Summary",
@@ -74,11 +71,6 @@ export default function TeamLeadDashboard() {
   const [articles, setArticles] = useState([]);
   const [flags, setFlags] = useState([]);
   const [actions, setActions] = useState([]);
-
-  const [showSetupTools, setShowSetupTools] = useState(
-    () =>
-      window.localStorage.getItem(STARTER_LIBRARY_STORAGE_KEY) !== "true"
-  );
 
   const [error, setError] = useState("");
 
@@ -144,26 +136,7 @@ export default function TeamLeadDashboard() {
     };
   }, [actions, articles, flags]);
 
-  const managementTabs = useMemo(
-    () =>
-      showSetupTools
-        ? [...BASE_MANAGEMENT_TABS, "Setup Tools"]
-        : BASE_MANAGEMENT_TABS,
-    [showSetupTools]
-  );
-
-  const handleSetupComplete = () => {
-    window.localStorage.setItem(
-      STARTER_LIBRARY_STORAGE_KEY,
-      "true"
-    );
-
-    setShowSetupTools(false);
-
-    if (managementTab === "Setup Tools") {
-      setManagementTab("Summary");
-    }
-  };
+  const managementTabs = BASE_MANAGEMENT_TABS;
 
   const openManagementTab = (
     tab,
@@ -376,16 +349,6 @@ export default function TeamLeadDashboard() {
             <KnowledgeBaseForm />
           )}
 
-          {/* Setup Tools */}
-          {managementTab === "Setup Tools" &&
-            showSetupTools && (
-              <StarterLibrarySetup
-                articles={articles}
-                onComplete={
-                  handleSetupComplete
-                }
-              />
-            )}
         </div>
       </main>
     </div>
