@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { subscribeAgentActions, subscribeFlags } from "../services/firestore";
+import { subscribeAgentActions, subscribeFlags, subscribeTicketEditRequests } from "../services/firestore";
 
 function getAgentName(flag) {
   return flag.agentName || flag.agentEmail || "Unknown Agent";
@@ -25,8 +25,10 @@ export default function FlagNotificationCenter() {
   const { currentUser, role, userProfile } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [supportNotifications, setSupportNotifications] = useState([]);
+  const [editRequestNotifications, setEditRequestNotifications] = useState([]);
   const initializedFlagsRef = useRef(false);
   const initializedSupportRef = useRef(false);
+  const initializedEditRequestsRef = useRef(false);
   const reviewPath = role === "quality_supervisor" ? "/quality" : "/overview";
   const supportPath = "/quality?tab=support";
 
@@ -36,6 +38,10 @@ export default function FlagNotificationCenter() {
   );
   const supportStorageKey = useMemo(
     () => `aquadesk_seen_support_requests_${currentUser?.uid || "guest"}`,
+    [currentUser?.uid]
+  );
+  const editRequestStorageKey = useMemo(
+    () => `aquadesk_seen_ticket_edit_requests_${currentUser?.uid || "guest"}`,
     [currentUser?.uid]
   );
 
@@ -124,7 +130,49 @@ export default function FlagNotificationCenter() {
     return unsubscribe;
   }, [currentUser, navigate, role, supportPath, supportStorageKey]);
 
-  if (!notifications.length && !supportNotifications.length) return null;
+  useEffect(() => {
+    setEditRequestNotifications([]);
+    initializedEditRequestsRef.current = false;
+    if (!currentUser || !["team_lead", "quality_supervisor"].includes(role)) return undefined;
+
+    const unsubscribe = subscribeTicketEditRequests((requests) => {
+      const pendingRequests = requests.filter((request) => request.status === "pending");
+      const seen = new Set(JSON.parse(localStorage.getItem(editRequestStorageKey) || "[]"));
+
+      if (!initializedEditRequestsRef.current) {
+        const newestIds = pendingRequests.slice(0, 20).map((request) => request.id);
+        localStorage.setItem(editRequestStorageKey, JSON.stringify(Array.from(new Set([...seen, ...newestIds]))));
+        initializedEditRequestsRef.current = true;
+        return;
+      }
+
+      const freshRequests = pendingRequests.filter((request) => !seen.has(request.id)).slice(0, 3);
+      if (!freshRequests.length) return;
+
+      const updatedSeen = new Set([...seen, ...freshRequests.map((request) => request.id)]);
+      localStorage.setItem(editRequestStorageKey, JSON.stringify(Array.from(updatedSeen).slice(-80)));
+
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        freshRequests.forEach((request) => {
+          const notification = new Notification("AquaDesk ticket edit request", {
+            body: `${request.agentName || "Unknown Agent"} requested one-time edit access.`,
+            tag: `aquadesk-ticket-edit-${request.id}`,
+          });
+          notification.onclick = () => {
+            window.focus();
+            navigate(`/tickets?highlight=${encodeURIComponent(request.ticketId || "")}`);
+            notification.close();
+          };
+        });
+      }
+
+      setEditRequestNotifications((current) => [...freshRequests, ...current].slice(0, 3));
+    });
+
+    return unsubscribe;
+  }, [currentUser, editRequestStorageKey, navigate, role]);
+
+  if (!notifications.length && !supportNotifications.length && !editRequestNotifications.length) return null;
 
   return (
     <div className="fixed bottom-4 right-4 z-[80] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-3">
@@ -163,6 +211,45 @@ export default function FlagNotificationCenter() {
             className="mt-3 rounded-2xl bg-brand-primary px-4 py-2 text-sm font-bold text-white shadow-card transition-colors hover:bg-brand-light"
           >
             Open Support Requests
+          </button>
+        </div>
+      ))}
+
+      {editRequestNotifications.map((request) => (
+        <div
+          key={request.id}
+          className="glass-card border-white/80 p-4 shadow-xl"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="mb-2 flex items-start justify-between gap-3">
+            <span className="rounded-full bg-brand-faint px-2.5 py-1 text-xs font-extrabold text-brand-primary">
+              Edit Request
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                setEditRequestNotifications((current) => current.filter((item) => item.id !== request.id))
+              }
+              className="rounded-full px-2 text-lg leading-none text-slate-400 hover:bg-white hover:text-slate-700"
+              aria-label="Dismiss edit request"
+            >
+              x
+            </button>
+          </div>
+          <p className="font-extrabold text-slate-950">{request.agentName || "Unknown Agent"}</p>
+          <p className="mt-1 line-clamp-2 text-sm leading-6 text-semantic-neutral">
+            Requested one-time edit access for {request.ticketTitle || "a ticket"}.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setEditRequestNotifications((current) => current.filter((item) => item.id !== request.id));
+              navigate(`/tickets?highlight=${encodeURIComponent(request.ticketId || "")}`);
+            }}
+            className="mt-3 rounded-2xl bg-brand-primary px-4 py-2 text-sm font-bold text-white shadow-card transition-colors hover:bg-brand-light"
+          >
+            Open Request
           </button>
         </div>
       ))}

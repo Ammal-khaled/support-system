@@ -2,7 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import { useAuth } from "../context/AuthContext";
-import { createTicket, subscribeTickets, subscribeUsers, updateTicket } from "../services/firestore";
+import {
+  createTicket,
+  requestTicketEdit,
+  subscribeTicketEditRequests,
+  subscribeTickets,
+  subscribeUsers,
+  updateTicket,
+  updateTicketEditRequest,
+} from "../services/firestore";
 
 const EMPTY_FORM = {
   customerName: "",
@@ -34,6 +42,25 @@ const STATUS_LABELS = new Map(STATUSES.map((status) => [status.toLowerCase(), st
 
 function normalizeStatus(status) {
   return STATUS_LABELS.get(String(status || "").trim().toLowerCase()) || "Open";
+}
+
+function normalizeCustomerValue(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizePhone(value) {
+  return String(value || "").replace(/[^\d+]/g, "");
+}
+
+function getDuplicateKey(ticket) {
+  const name = normalizeCustomerValue(ticket.customerName);
+  const phone = normalizePhone(ticket.customerPhone);
+  if (!name || !phone) return "";
+  return `${name}|${phone}`;
+}
+
+function isOpenTicket(ticket) {
+  return !["Resolved", "Closed"].includes(normalizeStatus(ticket.status));
 }
 
 function formatTimestamp(timestamp) {
@@ -71,6 +98,9 @@ export default function TicketsPage() {
   const [error, setError] = useState("");
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [inactiveUserIds, setInactiveUserIds] = useState(new Set());
+  const [editRequests, setEditRequests] = useState([]);
+  const [editReason, setEditReason] = useState("");
+  const [savingEditRequest, setSavingEditRequest] = useState(false);
 
   const agentName = userProfile?.name || currentUser?.displayName || currentUser?.email || "Agent";
   const canViewTeam = role === "team_lead" || role === "quality_supervisor";
@@ -107,6 +137,22 @@ export default function TicketsPage() {
     return unsubscribe;
   }, [canViewTeam]);
 
+  useEffect(() => {
+    if (!canViewTeam && !currentUser?.uid) return undefined;
+
+    const unsubscribe = subscribeTicketEditRequests(
+      (rows) => {
+        setEditRequests(rows);
+      },
+      () => {
+        setError("Unable to load ticket edit requests.");
+      },
+      canViewTeam ? undefined : { agentId: currentUser?.uid || "" }
+    );
+
+    return unsubscribe;
+  }, [canViewTeam, currentUser?.uid]);
+
   const visibleTickets = useMemo(() => {
     const search = query.trim().toLowerCase();
 
@@ -135,6 +181,35 @@ export default function TicketsPage() {
   }, [canViewTeam, currentUser?.uid, inactiveUserIds, query, statusFilter, tickets]);
 
   const selectedTicket = visibleTickets.find((ticket) => ticket.id === selectedId) || null;
+  const pendingEditRequests = useMemo(
+    () => editRequests.filter((request) => request.status === "pending"),
+    [editRequests]
+  );
+  const selectedTicketEditRequests = useMemo(
+    () => editRequests.filter((request) => request.ticketId === selectedTicket?.id),
+    [editRequests, selectedTicket?.id]
+  );
+  const activeEditApproval = useMemo(
+    () =>
+      selectedTicketEditRequests.find(
+        (request) =>
+          request.agentId === currentUser?.uid &&
+          request.status === "approved" &&
+          request.used !== true &&
+          selectedTicket?.editApprovalUsed !== true
+      ) || null,
+    [currentUser?.uid, selectedTicket?.editApprovalUsed, selectedTicketEditRequests]
+  );
+  const canEditSelectedTicket = canViewTeam || Boolean(activeEditApproval);
+
+  const duplicateTickets = useMemo(() => {
+    const formKey = getDuplicateKey(form);
+    if (!formKey) return [];
+
+    return tickets
+      .filter((ticket) => ticket.id !== selectedId && getDuplicateKey(ticket) === formKey && isOpenTicket(ticket))
+      .slice(0, 4);
+  }, [form, selectedId, tickets]);
 
   useEffect(() => {
     if (!highlightedTicketId || loading) return;
@@ -195,6 +270,7 @@ export default function TicketsPage() {
 
   const closeTicketEditor = () => {
     setIsEditorOpen(false);
+    setEditReason("");
   };
 
   const handleCreate = async (event) => {
@@ -214,6 +290,8 @@ export default function TicketsPage() {
         accountNumber: form.accountNumber.trim(),
         description: form.description.trim(),
         nextAction: form.nextAction.trim(),
+        duplicateKey: getDuplicateKey(form),
+        possibleDuplicateOf: duplicateTickets[0]?.id || "",
         createdById: currentUser?.uid || "",
         createdByName: agentName,
         assignedToId: currentUser?.uid || "",
@@ -235,7 +313,7 @@ export default function TicketsPage() {
 
   const handleUpdate = async (event) => {
     event.preventDefault();
-    if (!selectedTicket || !draft || saving || !canViewTeam) return;
+    if (!selectedTicket || !draft || saving || !canEditSelectedTicket) return;
 
     setSaving(true);
     setMessage("");
@@ -253,9 +331,17 @@ export default function TicketsPage() {
         nextAction: draft.nextAction.trim(),
         lastEditedById: currentUser?.uid || "",
         lastEditedByName: agentName,
+        editApprovalUsed: activeEditApproval ? true : selectedTicket.editApprovalUsed || false,
       };
 
       await updateTicket(selectedTicket.id, updatedTicket);
+      if (activeEditApproval) {
+        await updateTicketEditRequest(activeEditApproval.id, {
+          status: "used",
+          used: true,
+          usedAt: new Date(),
+        });
+      }
       setTickets((currentTickets) =>
         currentTickets.map((ticket) =>
           ticket.id === selectedTicket.id
@@ -269,6 +355,68 @@ export default function TicketsPage() {
     } catch (err) {
       console.error("Failed to update ticket:", err);
       setError("Unable to update ticket.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRequestEdit = async () => {
+    if (!selectedTicket || savingEditRequest) return;
+
+    setSavingEditRequest(true);
+    setMessage("");
+    setError("");
+
+    try {
+      await requestTicketEdit({
+        ticketId: selectedTicket.id,
+        ticketTitle: selectedTicket.title || "Untitled Ticket",
+        agentId: currentUser?.uid || "",
+        agentName,
+        reason: editReason.trim() || "Agent requested one-time edit permission.",
+      });
+      setEditReason("");
+      setMessage("Edit request sent to Team Lead and Quality.");
+      window.setTimeout(() => setMessage(""), 2600);
+    } catch (err) {
+      console.error("Failed to request ticket edit:", err);
+      setError("Unable to request edit permission.");
+    } finally {
+      setSavingEditRequest(false);
+    }
+  };
+
+  const handleReviewEditRequest = async (request, status) => {
+    if (saving) return;
+
+    setSaving(true);
+    setMessage("");
+    setError("");
+
+    try {
+      await updateTicketEditRequest(request.id, {
+        status,
+        reviewedById: currentUser?.uid || "",
+        reviewedByName: agentName,
+        reviewedAt: new Date(),
+        used: false,
+      });
+
+      if (status === "approved") {
+        await updateTicket(request.ticketId, {
+          editApprovedForId: request.agentId,
+          editApprovalRequestId: request.id,
+          editApprovalUsed: false,
+          editApprovedByName: agentName,
+          editApprovedAt: new Date(),
+        });
+      }
+
+      setMessage(status === "approved" ? "One-time edit approved." : "Edit request denied.");
+      window.setTimeout(() => setMessage(""), 2400);
+    } catch (err) {
+      console.error("Failed to review edit request:", err);
+      setError("Unable to update edit request.");
     } finally {
       setSaving(false);
     }
@@ -421,6 +569,32 @@ export default function TicketsPage() {
                     />
                   </div>
 
+                  {duplicateTickets.length > 0 && (
+                    <div className="rounded-card border border-semantic-warning/25 bg-semantic-warning/10 p-4">
+                      <p className="text-sm font-extrabold text-semantic-warning">
+                        Possible duplicate customer case
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-semantic-neutral">
+                        Same customer name and phone already exist on open tickets. Continue only if this is a separate case.
+                      </p>
+                      <div className="mt-3 space-y-2">
+                        {duplicateTickets.map((ticket) => (
+                          <button
+                            key={ticket.id}
+                            type="button"
+                            onClick={() => openTicketEditor(ticket.id)}
+                            className="w-full rounded-2xl border border-surface-border bg-surface-card px-3 py-2 text-left text-sm font-bold text-current hover:border-brand-primary"
+                          >
+                            {ticket.title || "Untitled Ticket"}
+                            <span className="ml-2 text-xs font-semibold text-semantic-neutral">
+                              {normalizeStatus(ticket.status)}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <button type="submit" disabled={saving} className="btn-primary w-full">
                     {saving ? "Saving..." : "Create Ticket"}
                   </button>
@@ -429,6 +603,61 @@ export default function TicketsPage() {
             </section>
 
             <section className="glass-card p-5">
+              {canViewTeam && pendingEditRequests.length > 0 && (
+                <div className="mb-5 rounded-card border border-brand-primary/20 bg-brand-faint/20 p-4">
+                  <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="text-base font-extrabold text-current">Ticket Edit Requests</h2>
+                      <p className="text-sm text-semantic-neutral">
+                        Approve one-time edits when an agent needs to correct a submitted ticket.
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-brand-primary px-3 py-1 text-xs font-extrabold text-white">
+                      {pendingEditRequests.length} pending
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {pendingEditRequests.slice(0, 3).map((request) => (
+                      <div key={request.id} className="rounded-2xl border border-surface-border bg-surface-card p-3">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <p className="font-extrabold text-current">{request.ticketTitle || "Ticket edit request"}</p>
+                            <p className="mt-1 text-sm text-semantic-neutral">
+                              {request.agentName || "Unknown Agent"}: {request.reason || "No reason added."}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openTicketEditor(request.ticketId)}
+                              className="btn-secondary px-3 py-2 text-xs"
+                            >
+                              Open
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewEditRequest(request, "denied")}
+                              disabled={saving}
+                              className="rounded-2xl border border-surface-border bg-surface-card px-3 py-2 text-xs font-bold text-semantic-neutral hover:border-semantic-error hover:text-semantic-error disabled:opacity-50"
+                            >
+                              Deny
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewEditRequest(request, "approved")}
+                              disabled={saving}
+                              className="rounded-2xl bg-semantic-success px-3 py-2 text-xs font-bold text-white hover:bg-emerald-600 disabled:opacity-50"
+                            >
+                              Approve
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="mb-4">
                 <h2 className="card-header">Ticket Queue</h2>
                 <p className="card-subtext">
@@ -535,20 +764,24 @@ export default function TicketsPage() {
                     Created by {selectedTicket.createdByName || "Unknown"} on {formatTimestamp(selectedTicket.createdAt)}
                   </p>
                   <p className="mt-1 text-xs font-semibold text-brand-primary">
-                    {canViewTeam ? "Team edit mode" : "Read-only: team leads and Quality Control can edit"}
+                    {canViewTeam
+                      ? "Team edit mode"
+                      : activeEditApproval
+                        ? "One-time edit approved"
+                        : "Read-only: request one-time edit permission if this ticket needs a correction"}
                   </p>
                 </div>
                 <div className="flex gap-2">
                   <button type="button" onClick={closeTicketEditor} className="btn-secondary">
                     Close
                   </button>
-                  <button type="submit" disabled={saving || !canViewTeam} className="btn-primary px-5">
-                    {!canViewTeam ? "Read Only" : saving ? "Saving..." : "Save"}
+                  <button type="submit" disabled={saving || !canEditSelectedTicket} className="btn-primary px-5">
+                    {!canEditSelectedTicket ? "Read Only" : saving ? "Saving..." : "Save"}
                   </button>
                 </div>
               </div>
 
-              <fieldset disabled={!canViewTeam || saving} className="min-w-0">
+              <fieldset disabled={!canEditSelectedTicket || saving} className="min-w-0">
 
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                   <div className="lg:col-span-2">
@@ -658,6 +891,41 @@ export default function TicketsPage() {
                   {selectedTicket.lastEditedByName ? ` by ${selectedTicket.lastEditedByName}` : ""}.
                 </div>
               </fieldset>
+
+              {!canViewTeam && !activeEditApproval && (
+                <div className="mt-5 rounded-card border border-surface-border bg-surface-panel p-4">
+                  <label className="label-field">Request One-Time Edit</label>
+                  <textarea
+                    value={editReason}
+                    onChange={(event) => setEditReason(event.target.value)}
+                    rows={3}
+                    className="input-field resize-y"
+                    placeholder="Explain what needs to be corrected..."
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRequestEdit}
+                    disabled={savingEditRequest}
+                    className="mt-3 btn-secondary w-full"
+                  >
+                    {savingEditRequest ? "Sending..." : "Send Edit Request"}
+                  </button>
+                </div>
+              )}
+
+              {selectedTicketEditRequests.length > 0 && (
+                <div className="mt-5 rounded-card border border-surface-border bg-surface-panel p-4">
+                  <p className="label-field">Edit Request History</p>
+                  <div className="mt-2 space-y-2">
+                    {selectedTicketEditRequests.slice(0, 4).map((request) => (
+                      <div key={request.id} className="rounded-2xl bg-surface-card px-3 py-2 text-sm">
+                        <span className="font-extrabold capitalize text-current">{request.status}</span>
+                        <span className="text-semantic-neutral"> - {request.reason || "No reason added."}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </form>
           </div>
         </div>

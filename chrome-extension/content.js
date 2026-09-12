@@ -1,6 +1,7 @@
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition;
 let isRecognitionRunning = false;
+let lastCaptionText = "";
 
 function escapeHtml(value) {
   return String(value || "").replace(/[&<>'"]/g, (character) => ({
@@ -45,19 +46,9 @@ chrome.runtime.onMessage.addListener((request) => {
   console.log("CSR Support Extension: soft-skill flag logged without interrupting the agent.", request);
 });
 
-async function hasExtensionSession() {
-  const { authSession } = await chrome.storage.session.get("authSession");
-  return Boolean(authSession?.refreshToken);
-}
-
-async function startRecognitionIfSignedIn() {
+function startRecognition() {
   if (!SpeechRecognition) {
     console.error("Speech Recognition is not supported in this browser.");
-    return;
-  }
-
-  if (!(await hasExtensionSession())) {
-    console.warn("CSR Support Extension: sign in to the extension before call monitoring starts.");
     return;
   }
 
@@ -96,9 +87,8 @@ async function startRecognitionIfSignedIn() {
   };
 
   // Restart automatically if it drops
-  recognition.onend = async () => {
+  recognition.onend = () => {
     isRecognitionRunning = false;
-    if (!(await hasExtensionSession())) return;
 
     try {
       recognition.start();
@@ -119,9 +109,33 @@ async function startRecognitionIfSignedIn() {
   }
 }
 
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "session" || !changes.authSession?.newValue) return;
-  startRecognitionIfSignedIn();
-});
+async function sendCaptionText(text) {
+  const normalizedText = String(text || "").trim();
+  if (!normalizedText || normalizedText === lastCaptionText) return;
 
-startRecognitionIfSignedIn();
+  lastCaptionText = normalizedText;
+  chrome.runtime.sendMessage({
+    type: "CHECK_TRANSCRIPT",
+    payload: normalizedText
+  });
+}
+
+function startCaptionObserver() {
+  const readCaptions = () => {
+    document.querySelectorAll(".live-caption-text").forEach((captionNode) => {
+      sendCaptionText(captionNode.textContent);
+    });
+  };
+
+  readCaptions();
+
+  const observer = new MutationObserver(readCaptions);
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true
+  });
+}
+
+startCaptionObserver();
+startRecognition();

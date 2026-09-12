@@ -10,7 +10,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://portal.mq.maqsam.com/*"],
+      "matches": ["https://portal.mq.maqsam.com/*", "http://localhost:3000/*"],
       "js": ["content.js"],
       "css": ["styles.css"]
     }

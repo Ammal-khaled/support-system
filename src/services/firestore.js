@@ -441,6 +441,51 @@ export const updateTicket = async (id, updates) => {
   });
 };
 
+export const subscribeTicketEditRequests = (callback, onError, filters = {}) => {
+  const normalizedFilters = typeof filters === "string" ? { ticketId: filters } : filters;
+  const editRequestsQuery = normalizedFilters.ticketId
+    ? query(collection(db, "ticket_edit_requests"), where("ticketId", "==", normalizedFilters.ticketId))
+    : normalizedFilters.agentId
+      ? query(collection(db, "ticket_edit_requests"), where("agentId", "==", normalizedFilters.agentId))
+      : query(collection(db, "ticket_edit_requests"), orderBy("createdAt", "desc"), limit(50));
+
+  return onSnapshot(
+    editRequestsQuery,
+    (snapshot) =>
+      callback(
+        mapSnapshot(snapshot).sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        })
+      ),
+    (error) => {
+      console.error("Error listening to ticket edit requests:", error);
+      if (onError) onError(error);
+    }
+  );
+};
+
+export const requestTicketEdit = async ({ ticketId, ticketTitle, agentId, agentName, reason }) => {
+  await addDoc(collection(db, "ticket_edit_requests"), {
+    ticketId,
+    ticketTitle,
+    agentId,
+    agentName,
+    reason,
+    status: "pending",
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+};
+
+export const updateTicketEditRequest = async (id, updates) => {
+  await updateDoc(doc(db, "ticket_edit_requests", id), {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  });
+};
+
 // Resolve old name-only bookmarks without guessing when names are duplicated.
 export const resolveAgentId = async (name) => {
   const sources = [["flags", "agentName", "agentId"],

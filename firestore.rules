@@ -40,6 +40,44 @@ service cloud.firestore {
       return activeUser() && request.resource.data.createdById == request.auth.uid;
     }
 
+    function hasOneTimeTicketEdit() {
+      return ownsExistingTicket()
+        && resource.data.editApprovedForId == request.auth.uid
+        && resource.data.editApprovalUsed != true
+        && request.resource.data.editApprovalUsed == true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'title',
+          'customerName',
+          'customerPhone',
+          'accountNumber',
+          'department',
+          'priority',
+          'status',
+          'description',
+          'nextAction',
+          'lastEditedById',
+          'lastEditedByName',
+          'editApprovalUsed',
+          'updatedAt'
+        ]);
+    }
+
+    function ownsIncomingTicketEditRequest() {
+      return activeUser()
+        && request.resource.data.agentId == request.auth.uid
+        && request.resource.data.status == 'pending';
+    }
+
+    function canMarkOwnEditRequestUsed() {
+      return activeUser()
+        && resource.data.agentId == request.auth.uid
+        && resource.data.status == 'approved'
+        && request.resource.data.status == 'used'
+        && request.resource.data.used == true
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'used', 'usedAt', 'updatedAt']);
+    }
+
     match /banned_phrases/{document} {
       allow read: if activeUser();
       allow write: if canReview();
@@ -61,7 +99,13 @@ service cloud.firestore {
     match /tickets/{document} {
       allow create: if ownsIncomingTicket();
       allow read: if canReview() || ownsExistingTicket();
-      allow update: if canReview();
+      allow update: if canReview() || hasOneTimeTicketEdit();
+    }
+
+    match /ticket_edit_requests/{document} {
+      allow create: if ownsIncomingTicketEditRequest();
+      allow read: if canReview() || resource.data.agentId == request.auth.uid;
+      allow update: if canReview() || canMarkOwnEditRequestUsed();
     }
 
     match /users/{uid} {
