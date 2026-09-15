@@ -31,10 +31,11 @@ Return only valid JSON with this shape:
   "isCompliant": boolean,
   "softSkills": {"status": "pass|coaching_needed", "findings": ["specific finding"], "feedback": "concise coaching advice"},
   "bannedPhrases": [{"phrase": "matched phrase", "severity": "critical|soft_skill", "replacement": "safer wording"}],
-  "incorrectInformation": [{"claim": "claim from transcript", "expected": "policy-supported information", "articleTitle": "matching article title"}],
+  "incorrectInformation": [{"category": "Wrong info", "claim": "claim from transcript", "expected": "policy-supported information", "articleTitle": "matching article title"}],
   "recommendations": ["specific next step"],
   "severity": "none|soft_skill|critical"
 }
+For every incorrectInformation item, set category exactly to "Wrong info".
 Only include banned phrases and incorrect information when supported by the supplied context.
 Use an empty array when there are no findings.`;
 

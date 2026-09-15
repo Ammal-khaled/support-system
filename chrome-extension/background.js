@@ -27,6 +27,11 @@ function getBooleanField(fields, name) {
   return Boolean(fields?.[name]?.booleanValue);
 }
 
+function getStringArrayField(fields, name) {
+  const values = fields?.[name]?.arrayValue?.values || [];
+  return values.map((value) => value.stringValue).filter(Boolean);
+}
+
 async function fetchCollection(collectionName) {
   try {
     const session = await getAuthSession();
@@ -68,6 +73,11 @@ async function getKbArticles() {
     id: document.id,
     title: getStringField(document.fields, "title"),
     content: getStringField(document.fields, "content"),
+    category: getStringField(document.fields, "category"),
+    summary: getStringField(document.fields, "summary"),
+    keywords: getStringArrayField(document.fields, "keywords"),
+    customerQuestions: getStringArrayField(document.fields, "customerQuestions"),
+    agentSteps: getStringArrayField(document.fields, "agentSteps"),
   }));
 }
 
@@ -150,6 +160,68 @@ function findPhraseMatch(transcript, phrases) {
   });
 }
 
+const COMMON_MATCH_WORDS = new Set([
+  "and",
+  "the",
+  "for",
+  "with",
+  "this",
+  "that",
+  "your",
+  "you",
+  "our",
+  "can",
+  "will",
+  "request",
+  "process",
+  "customer",
+  "details",
+]);
+
+function normalizeText(value) {
+  return String(value || "").toLowerCase();
+}
+
+function getArticleText(article) {
+  return [
+    article.title,
+    article.content,
+    article.summary,
+    article.category,
+    ...(article.keywords || []),
+    ...(article.customerQuestions || []),
+    ...(article.agentSteps || []),
+  ].join(" ");
+}
+
+function getSignalWords(value) {
+  return normalizeText(value)
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length > 2 && !COMMON_MATCH_WORDS.has(word));
+}
+
+function scoreArticleForTranscript(article, normalizedTranscript) {
+  let score = 0;
+
+  for (const keyword of article.keywords || []) {
+    const normalizedKeyword = normalizeText(keyword).trim();
+    if (!normalizedKeyword) continue;
+    if (normalizedTranscript.includes(normalizedKeyword)) {
+      score += normalizedKeyword.includes(" ") ? 8 : 5;
+    }
+  }
+
+  for (const word of getSignalWords(article.title)) {
+    if (normalizedTranscript.includes(word)) score += 3;
+  }
+
+  for (const word of getSignalWords(article.category)) {
+    if (normalizedTranscript.includes(word)) score += 2;
+  }
+
+  return score;
+}
+
 function findKbFactMismatch(transcript, kbArticles) {
   const timelinePattern =
     /\b(\d{1,3})\s*(day|days|hour|hours|week|weeks|month|months)\b/i;
@@ -157,23 +229,30 @@ function findKbFactMismatch(transcript, kbArticles) {
 
   if (!transcriptFact) return null;
 
-  for (const article of kbArticles) {
-    const articleFact = article.content.match(timelinePattern);
+  const normalizedTranscript = normalizeText(transcript);
+  const matches = kbArticles
+    .map((article) => ({
+      article,
+      articleFact: getArticleText(article).match(timelinePattern),
+      score: scoreArticleForTranscript(article, normalizedTranscript),
+    }))
+    .filter((match) => match.articleFact && match.score > 0)
+    .sort((left, right) => right.score - left.score);
 
-    if (!articleFact) continue;
+  if (!matches.length) return null;
 
-    const transcriptValue = `${transcriptFact[1]} ${transcriptFact[2].toLowerCase()}`;
-    const articleValue = `${articleFact[1]} ${articleFact[2].toLowerCase()}`;
+  const { article, articleFact } = matches[0];
+  const transcriptValue = `${transcriptFact[1]} ${transcriptFact[2].toLowerCase()}`;
+  const articleValue = `${articleFact[1]} ${articleFact[2].toLowerCase()}`;
 
-    if (transcriptValue !== articleValue) {
-      return {
-        wrongPhrase: transcriptValue,
-        correctPhrase: articleValue,
-        severity: "critical",
-        category: "kb_fact_mismatch",
-        kbArticleId: article.id,
-      };
-    }
+  if (transcriptValue !== articleValue) {
+    return {
+      wrongPhrase: transcriptValue,
+      correctPhrase: articleValue,
+      severity: "critical",
+      category: "kb_fact_mismatch",
+      kbArticleId: article.id,
+    };
   }
 
   return null;
@@ -376,7 +455,15 @@ async function analyzeAfterCall(transcript, bannedPhrases, kbArticles, qualityFl
   const jsonEnd = cleaned.lastIndexOf("}");
   if (jsonStart === -1 || jsonEnd === -1) throw new Error("AI returned an invalid after-call report.");
 
-  return { ...JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1)), ...agentContext };
+  const report = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1));
+  const incorrectInformation = Array.isArray(report.incorrectInformation)
+    ? report.incorrectInformation.map((item) => ({
+      ...item,
+      category: "Wrong info",
+    }))
+    : [];
+
+  return { ...report, incorrectInformation, ...agentContext };
 }
 
 async function writeAfterCallReport(report) {

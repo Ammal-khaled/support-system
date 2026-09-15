@@ -36,6 +36,7 @@ const SAMPLE_REPORT = {
   ],
   incorrectInformation: [
     {
+      category: "Wrong info",
       claim: "Refund approval is guaranteed",
       correction: "Refunds must be reviewed against the approved policy before an outcome is promised.",
     },
@@ -96,7 +97,7 @@ export default function AfterCallReportsFeed({ externalSearchQuery = "", showSea
       report.softSkills?.status,
       report.softSkills?.feedback,
       ...(report.bannedPhrases || []).flatMap((item) => [item.phrase, item.severity, item.replacement]),
-      ...(report.incorrectInformation || []).flatMap((item) => [item.claim, item.correction]),
+      ...(report.incorrectInformation || []).flatMap((item) => [item.category, item.claim, item.expected, item.correction, item.articleTitle]),
       ...(report.recommendations || []),
     ].some((field) => String(field || "").toLowerCase().includes(search));
 
@@ -203,6 +204,47 @@ export default function AfterCallReportsFeed({ externalSearchQuery = "", showSea
                     {report.softSkills.feedback}
                   </p>
                 )}
+                {report.incorrectInformation?.length > 0 && (
+                  <div className="mt-4">
+                    <p className="label-field">Wrong info</p>
+                    <div className="mt-2 space-y-2">
+                      {report.incorrectInformation.map((item, index) => (
+                        <div
+                          key={`${report.id}-wrong-info-${index}`}
+                          className="rounded-xl border border-semantic-error/20 bg-semantic-error/10 p-3 text-sm"
+                        >
+                          <div className="mb-2 flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-semantic-error/15 px-2.5 py-1 text-xs font-extrabold text-semantic-error">
+                              {item.category || "Wrong info"}
+                            </span>
+                            {item.articleTitle && (
+                              <span className="text-xs font-bold text-semantic-neutral">
+                                {item.articleTitle}
+                              </span>
+                            )}
+                          </div>
+                          <p className="font-semibold text-slate-900">
+                            {item.claim || "Incorrect claim not provided."}
+                          </p>
+                          <p className="mt-1 text-semantic-neutral">
+                            Correct info: {item.expected || item.correction || "Not provided."}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="mt-4 rounded-xl border border-surface-border bg-surface-card p-4">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <p className="label-field">Full transcript</p>
+                    <span className="text-xs font-bold text-semantic-neutral">
+                      {(report.transcript || "").length.toLocaleString()} characters
+                    </span>
+                  </div>
+                  <p className="max-h-64 overflow-y-auto whitespace-pre-wrap text-sm leading-6 text-semantic-neutral">
+                    {report.transcript || "No transcript was saved for this report."}
+                  </p>
+                </div>
                 {report.recommendations?.length > 0 && (
                   <div className="mt-4">
                     <p className="label-field">Recommended next steps</p>
