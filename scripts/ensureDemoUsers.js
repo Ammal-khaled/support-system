@@ -57,6 +57,7 @@ async function ensureUser(user) {
       name: user.name,
       email: user.email,
       role: user.role,
+      disabled: false,
       mustChangePassword: false,
       updatedAt: FieldValue.serverTimestamp(),
     },

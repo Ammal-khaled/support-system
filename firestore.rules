@@ -21,7 +21,7 @@ service cloud.firestore {
     }
 
     function canReview() {
-      return activeUser() && callerRole() in ['team_lead', 'quality_supervisor'];
+      return activeUser() && callerRole() in ['team_lead', 'quality_supervisor', 'quality_control'];
     }
 
     function ownsExistingAgentRecord() {
@@ -78,6 +78,23 @@ service cloud.firestore {
           .hasOnly(['status', 'used', 'usedAt', 'updatedAt']);
     }
 
+    function canCreateOwnAgentProfile(uid) {
+      return signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.role == 'agent'
+        && request.resource.data.disabled == false
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.keys().hasOnly([
+          'name',
+          'email',
+          'role',
+          'disabled',
+          'mustChangePassword',
+          'createdAt',
+          'updatedAt'
+        ]);
+    }
+
     match /banned_phrases/{document} {
       allow read: if activeUser();
       allow write: if canReview();
@@ -109,7 +126,8 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if activeUser() && (request.auth.uid == uid || canReview());
+      allow read: if (signedIn() && request.auth.uid == uid) || canReview();
+      allow create: if canCreateOwnAgentProfile(uid);
       allow update: if activeUser()
         && request.auth.uid == uid
         && request.resource.data.diff(resource.data).affectedKeys()

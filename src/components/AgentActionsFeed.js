@@ -16,6 +16,7 @@ function formatTimestamp(timestamp) {
 export default function AgentActionsFeed({
   externalSearchQuery = "",
   showSearch = true,
+  highlightedActionId = "",
 }) {
   const [actions, setActions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -150,6 +151,13 @@ export default function AgentActionsFeed({
           .toLowerCase(),
     });
   };
+
+  useEffect(() => {
+    if (!highlightedActionId || loading || editingAction?.id === highlightedActionId) return;
+
+    const highlightedAction = actions.find((action) => action.id === highlightedActionId);
+    if (highlightedAction) openEditor(highlightedAction);
+  }, [actions, editingAction?.id, highlightedActionId, loading]);
 
   /*
    * Save request after editing
@@ -343,7 +351,11 @@ export default function AgentActionsFeed({
               return (
                 <article
                   key={action.id}
-                  className="rounded-xl border border-surface-border bg-surface-bg p-4"
+                  className={`rounded-xl border p-4 ${
+                    highlightedActionId === action.id
+                      ? "border-brand-primary bg-brand-faint/25 shadow-[0_14px_30px_rgba(88,59,255,0.14)]"
+                      : "border-surface-border bg-surface-bg"
+                  }`}
                 >
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     {/* Request information */}

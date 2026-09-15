@@ -624,7 +624,7 @@ export default function AgentOverviewPage() {
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
 
-  const canViewTeam = role === "team_lead" || role === "quality_supervisor";
+  const canViewTeam = role === "team_lead" || role === "quality_supervisor" || role === "quality_control";
   const signedInName = userProfile?.name || currentUser?.displayName || currentUser?.email || "Agent";
 
   const handleTabChange = (nextTab) => {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import Sidebar from "../components/Sidebar";
@@ -64,7 +65,12 @@ function Metric({
 }
 
 export default function TeamLeadDashboard() {
-  const [managementTab, setManagementTab] = useState("Summary");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const requestedRequestId = searchParams.get("request") || "";
+  const [managementTab, setManagementTab] = useState(
+    requestedTab === "support" ? "Support Requests" : "Summary"
+  );
   const [flagFilter, setFlagFilter] = useState("all");
   const [managementQuery, setManagementQuery] = useState("");
 
@@ -97,8 +103,20 @@ export default function TeamLeadDashboard() {
 
   // Flags and Support Requests listeners
   useEffect(() => {
-    const unsubscribeFlags = subscribeFlags(setFlags);
-    const unsubscribeActions = subscribeAgentActions(setActions);
+    const unsubscribeFlags = subscribeFlags(
+      (data) => {
+        setFlags(data);
+        setError("");
+      },
+      () => setError("Unable to load quality flags for Team Lead dashboard.")
+    );
+    const unsubscribeActions = subscribeAgentActions(
+      (data) => {
+        setActions(data);
+        setError("");
+      },
+      () => setError("Unable to load support requests for Team Lead dashboard.")
+    );
 
     return () => {
       unsubscribeFlags();
@@ -138,12 +156,24 @@ export default function TeamLeadDashboard() {
 
   const managementTabs = BASE_MANAGEMENT_TABS;
 
+  useEffect(() => {
+    if (requestedTab === "support") setManagementTab("Support Requests");
+  }, [requestedTab]);
+
   const openManagementTab = (
     tab,
     nextFlagFilter = "all"
   ) => {
     setManagementTab(tab);
     setFlagFilter(nextFlagFilter);
+    const nextParams = new URLSearchParams(searchParams);
+    if (tab === "Support Requests") {
+      nextParams.set("tab", "support");
+    } else {
+      nextParams.delete("tab");
+      nextParams.delete("request");
+    }
+    setSearchParams(nextParams, { replace: true });
   };
 
   return (
@@ -312,6 +342,9 @@ export default function TeamLeadDashboard() {
                   managementQuery
                 }
                 showSearch={false}
+                highlightedActionId={
+                  requestedRequestId
+                }
               />
             </div>
           )}
@@ -335,6 +368,9 @@ export default function TeamLeadDashboard() {
                 managementQuery
               }
               showSearch={false}
+              highlightedActionId={
+                requestedRequestId
+              }
             />
           )}
 

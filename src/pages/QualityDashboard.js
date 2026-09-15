@@ -43,7 +43,9 @@ export default function QualityDashboard() {
   const [flags, setFlags] = useState([]);
   const [actions, setActions] = useState([]);
   const [qualityQuery, setQualityQuery] = useState("");
+  const [error, setError] = useState("");
   const tab = getQualityTab(searchParams.get("tab"));
+  const highlightedRequestId = searchParams.get("request") || "";
   const setTab = (nextTab) => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("tab", QUALITY_TAB_PARAMS[nextTab]);
@@ -51,8 +53,20 @@ export default function QualityDashboard() {
   };
 
   useEffect(() => {
-    const unsubscribeFlags = subscribeFlags(setFlags);
-    const unsubscribeActions = subscribeAgentActions(setActions);
+    const unsubscribeFlags = subscribeFlags(
+      (data) => {
+        setFlags(data);
+        setError("");
+      },
+      () => setError("Unable to load quality flags.")
+    );
+    const unsubscribeActions = subscribeAgentActions(
+      (data) => {
+        setActions(data);
+        setError("");
+      },
+      () => setError("Unable to load support requests.")
+    );
 
     return () => {
       unsubscribeFlags();
@@ -92,6 +106,12 @@ export default function QualityDashboard() {
             <QualityMetric label="Support Requests" value={stats.recentActions} tone="text-semantic-success" destination="Support Requests" onClick={() => setTab("Support Requests")} />
             <QualityMetric label="After-Call Reports" value="AI" tone="text-brand-primary" destination="Reports" onClick={() => setTab("After-Call Reports")} />
           </section>
+
+          {error && (
+            <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-semantic-error">
+              {error}
+            </div>
+          )}
 
           <section className="mb-6">
             <div className="admin-tab-shell">
@@ -137,7 +157,13 @@ export default function QualityDashboard() {
 
           {tab === "Critical Flags" && <FlagsFeed typeFilter="critical" externalSearchQuery={qualityQuery} showSearch={false} />}
 
-          {tab === "Support Requests" && <AgentActionsFeed externalSearchQuery={qualityQuery} showSearch={false} />}
+          {tab === "Support Requests" && (
+            <AgentActionsFeed
+              externalSearchQuery={qualityQuery}
+              showSearch={false}
+              highlightedActionId={highlightedRequestId}
+            />
+          )}
 
           {tab === "After-Call Reports" && <AfterCallReportsFeed externalSearchQuery={qualityQuery} showSearch={false} />}
 

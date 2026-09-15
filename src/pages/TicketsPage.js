@@ -86,6 +86,7 @@ export default function TicketsPage() {
   const { currentUser, userProfile, role } = useAuth();
   const [searchParams] = useSearchParams();
   const highlightedTicketId = searchParams.get("highlight") || "";
+  const mergeTicketId = searchParams.get("merge") || "";
   const [tickets, setTickets] = useState([]);
   const [selectedId, setSelectedId] = useState("");
   const [form, setForm] = useState(EMPTY_FORM);
@@ -103,7 +104,7 @@ export default function TicketsPage() {
   const [savingEditRequest, setSavingEditRequest] = useState(false);
 
   const agentName = userProfile?.name || currentUser?.displayName || currentUser?.email || "Agent";
-  const canViewTeam = role === "team_lead" || role === "quality_supervisor";
+  const canViewTeam = role === "team_lead" || role === "quality_supervisor" || role === "quality_control";
 
   useEffect(() => {
     const unsubscribe = subscribeTickets(
@@ -212,14 +213,15 @@ export default function TicketsPage() {
   }, [form, selectedId, tickets]);
 
   useEffect(() => {
-    if (!highlightedTicketId || loading) return;
+    if ((!highlightedTicketId && !mergeTicketId) || loading) return;
 
-    const highlightedTicket = visibleTickets.find((ticket) => ticket.id === highlightedTicketId);
+    const targetTicketId = highlightedTicketId || mergeTicketId;
+    const highlightedTicket = visibleTickets.find((ticket) => ticket.id === targetTicketId);
     if (highlightedTicket) {
       setSelectedId(highlightedTicket.id);
       setIsEditorOpen(true);
     }
-  }, [highlightedTicketId, loading, visibleTickets]);
+  }, [highlightedTicketId, loading, mergeTicketId, visibleTickets]);
 
   useEffect(() => {
     if (!selectedTicket) {
@@ -268,14 +270,35 @@ export default function TicketsPage() {
     setIsEditorOpen(true);
   };
 
+  const handleMergeDuplicate = (ticket) => {
+    const mergeSummary = [
+      form.title.trim() && `New case title: ${form.title.trim()}`,
+      form.description.trim() && `Issue details: ${form.description.trim()}`,
+      form.nextAction.trim() && `Next action: ${form.nextAction.trim()}`,
+      form.accountNumber.trim() && `Account: ${form.accountNumber.trim()}`,
+      form.department && `Department: ${form.department}`,
+      form.priority && `Priority: ${form.priority}`,
+    ].filter(Boolean).join("\n");
+
+    setSelectedId(ticket.id);
+    setIsEditorOpen(true);
+    setEditReason(
+      mergeSummary
+        ? `Please merge these duplicate case details into the existing ticket:\n${mergeSummary}`
+        : "Please merge this duplicate customer case into the existing ticket."
+    );
+    setMessage("Opened the existing matching ticket. Review it or request one-time edit permission to merge the new details.");
+  };
+
   const closeTicketEditor = () => {
     setIsEditorOpen(false);
+    if (editReason.startsWith("Please merge")) setMessage("");
     setEditReason("");
   };
 
   const handleCreate = async (event) => {
     event.preventDefault();
-    if (!form.title.trim() || !form.customerName.trim() || saving) return;
+    if (!form.title.trim() || !form.customerName.trim() || !form.customerPhone.trim() || !form.description.trim() || saving) return;
 
     setSaving(true);
     setMessage("");
@@ -476,10 +499,13 @@ export default function TicketsPage() {
               <form onSubmit={handleCreate} className="glass-card p-5">
                 <h2 className="card-header">Create Ticket</h2>
                 <p className="card-subtext">Capture the customer issue while the call is still fresh.</p>
+                <p className="mt-2 text-xs font-bold text-semantic-neutral">
+                  Mandatory fields: customer name, phone, ticket title, and issue details.
+                </p>
 
                 <div className="mt-5 space-y-4">
                   <div>
-                    <label className="label-field">Customer Name</label>
+                    <label className="label-field">Customer Name *</label>
                     <input
                       value={form.customerName}
                       onChange={(event) => handleFormChange("customerName", event.target.value)}
@@ -490,11 +516,12 @@ export default function TicketsPage() {
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
                     <div>
-                      <label className="label-field">Phone</label>
+                      <label className="label-field">Phone *</label>
                       <input
                         value={form.customerPhone}
                         onChange={(event) => handleFormChange("customerPhone", event.target.value)}
                         className="input-field"
+                        required
                       />
                     </div>
                     <div>
@@ -508,7 +535,7 @@ export default function TicketsPage() {
                   </div>
 
                   <div>
-                    <label className="label-field">Ticket Title</label>
+                    <label className="label-field">Ticket Title *</label>
                     <input
                       value={form.title}
                       onChange={(event) => handleFormChange("title", event.target.value)}
@@ -550,12 +577,13 @@ export default function TicketsPage() {
                   </div>
 
                   <div>
-                    <label className="label-field">Issue Details</label>
+                    <label className="label-field">Issue Details *</label>
                     <textarea
                       value={form.description}
                       onChange={(event) => handleFormChange("description", event.target.value)}
                       rows={4}
                       className="input-field resize-y"
+                      required
                     />
                   </div>
 
@@ -579,17 +607,36 @@ export default function TicketsPage() {
                       </p>
                       <div className="mt-3 space-y-2">
                         {duplicateTickets.map((ticket) => (
-                          <button
+                          <div
                             key={ticket.id}
-                            type="button"
-                            onClick={() => openTicketEditor(ticket.id)}
-                            className="w-full rounded-2xl border border-surface-border bg-surface-card px-3 py-2 text-left text-sm font-bold text-current hover:border-brand-primary"
+                            className="rounded-2xl border border-surface-border bg-surface-card p-3"
                           >
-                            {ticket.title || "Untitled Ticket"}
-                            <span className="ml-2 text-xs font-semibold text-semantic-neutral">
-                              {normalizeStatus(ticket.status)}
-                            </span>
-                          </button>
+                            <p className="text-sm font-extrabold text-current">
+                              {ticket.title || "Untitled Ticket"}
+                              <span className="ml-2 text-xs font-semibold text-semantic-neutral">
+                                {normalizeStatus(ticket.status)}
+                              </span>
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-semantic-neutral">
+                              {ticket.customerName || "Unknown Customer"} · {ticket.customerPhone || "No phone"}
+                            </p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openTicketEditor(ticket.id)}
+                                className="rounded-xl border border-surface-border bg-surface-card px-3 py-2 text-xs font-bold text-current hover:border-brand-primary"
+                              >
+                                Open Ticket
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleMergeDuplicate(ticket)}
+                                className="rounded-xl bg-brand-primary px-3 py-2 text-xs font-bold text-white hover:bg-brand-light"
+                              >
+                                Merge With This Ticket
+                              </button>
+                            </div>
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -702,7 +749,7 @@ export default function TicketsPage() {
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                   {visibleTickets.map((ticket) => {
                     const isSelected = selectedTicket?.id === ticket.id;
-                    const isHighlighted = highlightedTicketId === ticket.id;
+                    const isHighlighted = highlightedTicketId === ticket.id || mergeTicketId === ticket.id;
 
                     return (
                       <button
@@ -895,6 +942,11 @@ export default function TicketsPage() {
               {!canViewTeam && !activeEditApproval && (
                 <div className="mt-5 rounded-card border border-surface-border bg-surface-panel p-4">
                   <label className="label-field">Request One-Time Edit</label>
+                  {editReason.startsWith("Please merge") && (
+                    <div className="mb-3 rounded-2xl border border-brand-primary/25 bg-brand-faint/25 px-3 py-2 text-sm font-semibold text-brand-primary">
+                      Merge details are ready below. Send this request so Team Lead or Quality can approve the one-time edit.
+                    </div>
+                  )}
                   <textarea
                     value={editReason}
                     onChange={(event) => setEditReason(event.target.value)}

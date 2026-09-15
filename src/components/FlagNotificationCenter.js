@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { subscribeAgentActions, subscribeFlags, subscribeTicketEditRequests } from "../services/firestore";
@@ -8,7 +8,7 @@ function getAgentName(flag) {
 }
 
 function isVisibleToUser(flag, currentUser, userProfile, role) {
-  if (role === "team_lead" || role === "quality_supervisor") return true;
+  if (["team_lead", "quality_supervisor", "quality_control"].includes(role)) return true;
 
   const signedInName =
     userProfile?.name || currentUser?.displayName || currentUser?.email || "";
@@ -29,8 +29,13 @@ export default function FlagNotificationCenter() {
   const initializedFlagsRef = useRef(false);
   const initializedSupportRef = useRef(false);
   const initializedEditRequestsRef = useRef(false);
-  const reviewPath = role === "quality_supervisor" ? "/quality" : "/overview";
-  const supportPath = "/quality?tab=support";
+  const canReviewRole = ["team_lead", "quality_supervisor", "quality_control"].includes(role);
+  const reviewPath = role === "quality_supervisor" || role === "quality_control" ? "/quality" : "/overview";
+  const getSupportPath = useCallback((actionId) =>
+    role === "team_lead"
+      ? `/team-lead?tab=support&request=${encodeURIComponent(actionId || "")}`
+      : `/quality?tab=support&request=${encodeURIComponent(actionId || "")}`,
+  [role]);
 
   const flagStorageKey = useMemo(
     () => `aquadesk_seen_flags_${currentUser?.uid || "guest"}`,
@@ -48,7 +53,7 @@ export default function FlagNotificationCenter() {
   useEffect(() => {
     setNotifications([]);
     initializedFlagsRef.current = false;
-    if (!currentUser || !["team_lead", "quality_supervisor"].includes(role)) return undefined;
+    if (!currentUser || !canReviewRole) return undefined;
 
     const unsubscribe = subscribeFlags((flags) => {
       const seen = new Set(JSON.parse(localStorage.getItem(flagStorageKey) || "[]"));
@@ -87,12 +92,12 @@ export default function FlagNotificationCenter() {
     });
 
     return unsubscribe;
-  }, [currentUser, flagStorageKey, navigate, reviewPath, role, userProfile]);
+  }, [canReviewRole, currentUser, flagStorageKey, navigate, reviewPath, role, userProfile]);
 
   useEffect(() => {
     setSupportNotifications([]);
     initializedSupportRef.current = false;
-    if (!currentUser || !["team_lead", "quality_supervisor"].includes(role)) return undefined;
+    if (!currentUser || !canReviewRole) return undefined;
 
     const unsubscribe = subscribeAgentActions((actions) => {
       const seen = new Set(JSON.parse(localStorage.getItem(supportStorageKey) || "[]"));
@@ -118,7 +123,7 @@ export default function FlagNotificationCenter() {
           });
           notification.onclick = () => {
             window.focus();
-            navigate(supportPath);
+            navigate(getSupportPath(action.id));
             notification.close();
           };
         });
@@ -128,12 +133,12 @@ export default function FlagNotificationCenter() {
     });
 
     return unsubscribe;
-  }, [currentUser, navigate, role, supportPath, supportStorageKey]);
+  }, [canReviewRole, currentUser, getSupportPath, navigate, role, supportStorageKey]);
 
   useEffect(() => {
     setEditRequestNotifications([]);
     initializedEditRequestsRef.current = false;
-    if (!currentUser || !["team_lead", "quality_supervisor"].includes(role)) return undefined;
+    if (!currentUser || !canReviewRole) return undefined;
 
     const unsubscribe = subscribeTicketEditRequests((requests) => {
       const pendingRequests = requests.filter((request) => request.status === "pending");
@@ -170,7 +175,7 @@ export default function FlagNotificationCenter() {
     });
 
     return unsubscribe;
-  }, [currentUser, editRequestStorageKey, navigate, role]);
+  }, [canReviewRole, currentUser, editRequestStorageKey, navigate, role]);
 
   if (!notifications.length && !supportNotifications.length && !editRequestNotifications.length) return null;
 
@@ -206,11 +211,11 @@ export default function FlagNotificationCenter() {
             type="button"
             onClick={() => {
               setSupportNotifications((current) => current.filter((item) => item.id !== action.id));
-              navigate(supportPath);
+              navigate(getSupportPath(action.id));
             }}
             className="mt-3 rounded-2xl bg-brand-primary px-4 py-2 text-sm font-bold text-white shadow-card transition-colors hover:bg-brand-light"
           >
-            Open Support Requests
+            Open Request
           </button>
         </div>
       ))}

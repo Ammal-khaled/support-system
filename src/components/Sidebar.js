@@ -9,8 +9,8 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const { currentUser, role, userProfile } = useAuth();
   const { isDark, toggleTheme } = useTheme();
-  const canReceiveDesktopAlerts = ["team_lead", "quality_supervisor"].includes(role);
-  const roleLabel = role === "quality_supervisor"
+  const canReceiveDesktopAlerts = ["team_lead", "quality_supervisor", "quality_control"].includes(role);
+  const roleLabel = role === "quality_supervisor" || role === "quality_control"
     ? "Quality Control"
     : (role || "agent").replace("_", " ");
 
@@ -33,7 +33,7 @@ export default function Sidebar() {
           { name: "Quality Review", path: "/quality", code: "QA" },
           { name: "Team Management", path: "/create-user", code: "TM" },
         ]
-      : role === "quality_supervisor"
+      : role === "quality_supervisor" || role === "quality_control"
         ? [
             { name: "Dashboard", path: "/overview", code: "DB" },
             { name: "Quality Review", path: "/quality", code: "QA" },

@@ -1,13 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginUser } from "../services/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
-import { useAuth } from "../context/AuthContext";
 
 function destinationForRole(role) {
   if (role === "team_lead") return "/team-lead";
-  if (role === "quality_supervisor") return "/quality";
+  if (role === "quality_supervisor" || role === "quality_control") return "/quality";
   if (role === "disabled") return "/login";
   return "/agent";
 }
@@ -18,18 +17,6 @@ export default function Login() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
-  const { currentUser, loading, userProfile } = useAuth();
-
-  useEffect(() => {
-    if (!loading && currentUser) {
-      const role = userProfile?.role;
-      if (role === "disabled" || userProfile?.disabled) {
-        setError("This account has been deactivated. Contact your team lead.");
-        return;
-      }
-      navigate(destinationForRole(role), { replace: true });
-    }
-  }, [currentUser, loading, userProfile, navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -44,17 +31,22 @@ export default function Login() {
       return;
     }
 
-    const userDoc = await getDoc(doc(db, "users", user.uid));
-    const profile = userDoc.exists() ? userDoc.data() : { role: "agent" };
-    if (profile.role === "disabled" || profile.disabled) {
-      setError("This account has been deactivated. Contact your team lead.");
-      setSubmitting(false);
-      return;
-    }
-    if (profile.mustChangePassword) {
-      navigate("/change-password");
-    } else {
-      navigate(destinationForRole(profile.role));
+    try {
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+      const profile = userDoc.exists() ? userDoc.data() : { role: "agent" };
+      if (profile.role === "disabled" || profile.disabled) {
+        setError("This account has been deactivated. Contact your team lead.");
+        setSubmitting(false);
+        return;
+      }
+      if (profile.mustChangePassword) {
+        navigate("/change-password");
+      } else {
+        navigate(destinationForRole(profile.role), { replace: true });
+      }
+    } catch (profileError) {
+      console.error("Failed to load login profile:", profileError);
+      setError("Signed in, but the AquaDesk profile could not be loaded.");
     }
     setSubmitting(false);
   };
@@ -105,31 +97,31 @@ export default function Login() {
         )}
 
         <form onSubmit={handleLogin} className="space-y-5">
-          <div>
-            <label className="label-field">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="input-field"
-              required
-              autoComplete="email"
-            />
-          </div>
-          <div>
-            <label className="label-field">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="input-field"
-              required
-              autoComplete="current-password"
-            />
-          </div>
-          <button type="submit" disabled={submitting} className="btn-primary w-full">
-            {submitting ? "Signing in..." : "Sign In"}
-          </button>
+            <div>
+              <label className="label-field">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="input-field"
+                required
+                autoComplete="email"
+              />
+            </div>
+            <div>
+              <label className="label-field">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input-field"
+                required
+                autoComplete="current-password"
+              />
+            </div>
+            <button type="submit" disabled={submitting} className="btn-primary w-full">
+              {submitting ? "Signing in..." : "Sign In"}
+            </button>
         </form>
         </section>
       </div>

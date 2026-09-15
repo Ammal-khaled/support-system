@@ -90,7 +90,7 @@ function App() {
           <Route
             path="/quality"
             element={
-              <ProtectedRoute requiredRole={["team_lead", "quality_supervisor"]}>
+              <ProtectedRoute requiredRole={["team_lead", "quality_supervisor", "quality_control"]}>
                 <QualityDashboard />
               </ProtectedRoute>
             }
