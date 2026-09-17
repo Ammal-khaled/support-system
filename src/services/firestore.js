@@ -295,6 +295,8 @@ export const getFlags = () =>
     })
   );
 
+export const getCoachingNotes = () => fetchCollection("agents_coaching_notes");
+
 export const getAgentActions = () =>
   fetchCollection("agent_actions", (rows) =>
     [...rows].sort((a, b) => {

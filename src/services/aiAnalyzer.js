@@ -71,6 +71,13 @@ export async function analyzeSoftSkills(transcriptSnippet, context = {}) {
     throw new Error("AI coaching is not configured. Set REACT_APP_AI_WORKER_URL.");
   }
 
+  if (hasTranscript && transcriptSnippet.trim().length > 50000) {
+    throw new Error("Transcript exceeds the 50,000-character analysis limit. Please split it into smaller sections.");
+  }
+  if (hasAudio && context.audioBase64.length > 18000000) {
+    throw new Error("Recording is too large. Please upload a smaller recording (under 13 MB).");
+  }
+
   const response = await fetch(
     AI_WORKER_URL,
     {
@@ -91,7 +98,9 @@ export async function analyzeSoftSkills(transcriptSnippet, context = {}) {
   );
 
   if (!response.ok) {
-    throw new Error(`Gemini request failed with status ${response.status}.`);
+    const failure = await response.json().catch(() => ({}));
+    const reason = typeof failure.error === "string" ? failure.error : failure.error?.message;
+    throw new Error(`AI analysis failed (${response.status})${reason ? `: ${reason}` : ". Please try again or contact your administrator."}`);
   }
 
   const data = await response.json();

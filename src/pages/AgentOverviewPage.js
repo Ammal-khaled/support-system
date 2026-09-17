@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import { downloadWorkbook, enrichExport } from "../services/exportWorkbook";
 import { useAuth } from "../context/AuthContext";
 import {
   getAgentActionsByDateRange,
   getAgentFlagsByDateRange,
+  getTickets,
+  getAfterCallReports,
+  getTicketEditRequests,
+  getCoachingNotes,
   getUserById,
   markFlagReviewed,
   resolveAgentId,
@@ -91,10 +96,6 @@ function recordMatchesSearch(row, fields, search) {
 function toDateInputValue(date) {
   const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return localDate.toISOString().slice(0, 10);
-}
-
-function csvCell(value) {
-  return `"${String(value ?? "").replace(/"/g, '""').replace(/\r?\n/g, " ")}"`;
 }
 
 function calculateQualityScore(actions, flags) {
@@ -882,48 +883,24 @@ export default function AgentOverviewPage() {
     setExporting(true);
     setExportStatus("");
     try {
-      const [exportFlags, exportActions] = await Promise.all([
+      const [exportFlags, exportActions, tickets, reports, requests, notes, profile] = await Promise.all([
         getAgentFlagsByDateRange(detailAgentId, startDate, endDate),
         getAgentActionsByDateRange(detailAgentId, startDate, endDate),
+        getTickets(), getAfterCallReports(), getTicketEditRequests(), getCoachingNotes(), getUserById(detailAgentId),
       ]);
-      const rows = [
-        ...exportFlags.map((flag) => ({
-          date: getDate(flag, ["timestamp"]),
-          type: flag.type || "flag",
-          matchedPhrase: flag.matchedPhrase || "",
-          transcriptSnippet: flag.transcriptSnippet || "",
-          reviewed: flag.reviewed ? "Yes" : "No",
-        })),
-        ...exportActions.map((action) => ({
-          date: getDate(action, ["timestamp"]),
-          type: "support_request",
-          matchedPhrase: action.actionType || "",
-          transcriptSnippet: action.source || "",
-          reviewed: "",
-        })),
-      ].sort((a, b) => (b.date?.getTime() || 0) - (a.date?.getTime() || 0));
-
-      const header = ["date", "type", "matchedPhrase", "transcriptSnippet", "reviewed"];
-      const csv = [
-        header.map(csvCell).join(","),
-        ...rows.map((row) => [
-          row.date ? row.date.toLocaleString() : "Pending",
-          row.type,
-          row.matchedPhrase,
-          row.transcriptSnippet,
-          row.reviewed,
-        ].map(csvCell).join(",")),
-      ].join("\r\n");
-      const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${agentNameParam.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-history-${exportStart}-to-${exportEnd}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      setExportStatus(`Exported ${rows.length} records.`);
+      const user = { ...profile, id: detailAgentId };
+      const agentName = user.name || user.displayName || agentNameParam;
+      const belongsInRange = (row) => {
+        const date = getMostRecentDate(row, ["timestamp", "createdAt", "updatedAt"]);
+        return (row.agentId === detailAgentId || row.createdById === detailAgentId || row.id === detailAgentId) && (!date || (date >= startDate && date <= endDate));
+      };
+      const datasets = [
+        ["Agent", [user]], ["Quality Flags", exportFlags], ["Support Requests", exportActions],
+        ["Tickets", tickets.filter(belongsInRange)], ["After-Call Reports", reports.filter(belongsInRange)],
+        ["Ticket Edit Requests", requests.filter(belongsInRange)], ["Coaching Notes", notes.filter(belongsInRange)],
+      ].map(([label, rows]) => ({ label, rows: rows.map((row) => enrichExport({ ...row, agentId: detailAgentId, agentName }, [user])) }));
+      await downloadWorkbook(`${agentName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${exportStart}-to-${exportEnd}.xlsx`, datasets);
+      setExportStatus(`Exported ${datasets.reduce((count, dataset) => count + dataset.rows.length, 0)} records including agent details.`);
     } catch (error) {
       console.error("Could not export agent history:", error);
       setExportStatus("Could not export this history. Please try again.");
@@ -1107,7 +1084,7 @@ export default function AgentOverviewPage() {
                 />
               </label>
               <button type="button" onClick={handleExport} disabled={exporting} className="btn-primary px-5">
-                {exporting ? "Exporting..." : "Export CSV"}
+                {exporting ? "Exporting..." : "Export Excel"}
               </button>
             </div>
           </div>

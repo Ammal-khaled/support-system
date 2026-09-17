@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { downloadWorkbook, enrichExport } from "../services/exportWorkbook";
 import {
   getActionTypes,
   getAfterCallReports,
@@ -9,6 +10,7 @@ import {
   getTicketEditRequests,
   getTickets,
   getUsers,
+  getCoachingNotes,
 } from "../services/firestore";
 
 const EXPORTS = [
@@ -21,6 +23,7 @@ const EXPORTS = [
   ["knowledge_base", "Knowledge Base", getPolicies],
   ["banned_phrases", "Flag Rules", getBannedPhrases],
   ["action_types", "Support Topics", getActionTypes],
+  ["coaching_notes", "Coaching Notes", getCoachingNotes],
 ];
 
 const DATE_FIELDS = ["timestamp", "createdAt", "updatedAt", "reviewedAt", "usedAt", "passwordChangedAt"];
@@ -100,10 +103,12 @@ export default function ExportCenter() {
   const [endDate, setEndDate] = useState("");
 
   const loadAllData = async () => {
+    if (startDate && endDate && startDate > endDate) throw new Error("The start date must be before the end date.");
+    const users = await getUsers();
     const entries = await Promise.all(
       EXPORTS.map(async ([key, label, loader]) => {
         const rows = (await loader()).filter((row) => isWithinExportRange(row, startDate, endDate));
-        return [key, { label, rows: rows.map((row) => normalizeValue(row)) }];
+        return [key, { label, rows: rows.map((row) => enrichExport(row, users)) }];
       })
     );
     return Object.fromEntries(entries);
@@ -114,12 +119,14 @@ export default function ExportCenter() {
     setStatus("");
     setError("");
     try {
+      if (startDate && endDate && startDate > endDate) throw new Error("The start date must be before the end date.");
+      const users = await getUsers();
       const rows = (await loader()).filter((row) => isWithinExportRange(row, startDate, endDate));
-      downloadFile(`aquadesk-${key}.csv`, rowsToCsv(rows.map((row) => normalizeValue(row))), "text/csv;charset=utf-8");
+      downloadFile(`aquadesk-${key}.csv`, rowsToCsv(rows.map((row) => enrichExport(row, users))), "text/csv;charset=utf-8");
       setStatus(`Exported ${rows.length} ${label.toLowerCase()} records.`);
     } catch (err) {
       console.error(`Failed to export ${key}:`, err);
-      setError(`Could not export ${label}.`);
+      setError(err.message || `Could not export ${label}.`);
     } finally {
       setLoadingKey("");
     }
@@ -131,16 +138,12 @@ export default function ExportCenter() {
     setError("");
     try {
       const data = await loadAllData();
-      downloadFile(
-        `aquadesk-full-export-${new Date().toISOString().slice(0, 10)}.json`,
-        JSON.stringify(data, null, 2),
-        "application/json;charset=utf-8"
-      );
+      await downloadWorkbook(`aquadesk-full-export-${new Date().toISOString().slice(0, 10)}.xlsx`, data);
       const total = Object.values(data).reduce((sum, item) => sum + item.rows.length, 0);
       setStatus(`Exported ${total} records across ${EXPORTS.length} datasets.`);
     } catch (err) {
       console.error("Failed to export all data:", err);
-      setError("Could not export all data.");
+      setError(err.message || "Could not export all data.");
     } finally {
       setLoadingKey("");
     }
@@ -169,7 +172,7 @@ export default function ExportCenter() {
             Clear Dates
           </button>
           <button type="button" onClick={exportEverything} disabled={Boolean(loadingKey)} className="btn-primary px-5 text-sm">
-            {loadingKey === "all" ? "Exporting..." : "Export Everything"}
+            {loadingKey === "all" ? "Exporting..." : "Export Everything (Excel)"}
           </button>
         </div>
       </div>
