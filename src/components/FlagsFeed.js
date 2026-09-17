@@ -14,6 +14,7 @@ export default function FlagsFeed({ typeFilter = "all", externalSearchQuery = ""
   const [reviewingId, setReviewingId] = useState(null);
   const [inactiveUserIds, setInactiveUserIds] = useState(new Set());
   const [editingFlag, setEditingFlag] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [editForm, setEditForm] = useState({
     type: "soft_skill",
     matchedPhrase: "",
@@ -84,12 +85,12 @@ export default function FlagsFeed({ typeFilter = "all", externalSearchQuery = ""
   };
 
   const handleDelete = async () => {
-    if (!editingFlag) return;
-    if (!window.confirm(`Delete flag "${editingFlag.matchedPhrase || "quality flag"}"? This cannot be undone.`)) return;
-    setReviewingId(editingFlag.id);
+    if (!deleteTarget) return;
+    setReviewingId(deleteTarget.id);
     try {
-      await deleteFlag(editingFlag.id);
+      await deleteFlag(deleteTarget.id);
       setEditingFlag(null);
+      setDeleteTarget(null);
     } finally {
       setReviewingId(null);
     }
@@ -273,7 +274,7 @@ export default function FlagsFeed({ typeFilter = "all", externalSearchQuery = ""
             </div>
 
             <div className="mt-6 flex justify-end gap-2">
-              <button type="button" onClick={handleDelete} disabled={reviewingId === editingFlag.id} className="min-h-[48px] rounded-2xl bg-semantic-error px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-red-600 disabled:opacity-50">
+              <button type="button" onClick={() => setDeleteTarget(editingFlag)} disabled={reviewingId === editingFlag.id} className="min-h-[48px] rounded-2xl bg-semantic-error px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-red-600 disabled:opacity-50">
                 Delete
               </button>
               <button type="button" onClick={() => setEditingFlag(null)} className="btn-secondary px-4 text-sm font-bold">
@@ -284,6 +285,24 @@ export default function FlagsFeed({ typeFilter = "all", externalSearchQuery = ""
               </button>
             </div>
           </form>
+        </div>
+      )}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-md rounded-card border border-surface-border bg-surface-card p-6 shadow-2xl">
+            <h3 className="text-xl font-extrabold text-slate-950">Delete quality flag?</h3>
+            <p className="mt-2 text-sm leading-6 text-semantic-neutral">
+              Delete flag "{deleteTarget.matchedPhrase || "quality flag"}"? This cannot be undone.
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={() => setDeleteTarget(null)} className="btn-secondary px-4 text-sm font-bold">
+                Cancel
+              </button>
+              <button type="button" onClick={handleDelete} disabled={reviewingId === deleteTarget.id} className="min-h-[48px] rounded-2xl bg-semantic-error px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-red-600 disabled:opacity-50">
+                {reviewingId === deleteTarget.id ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>

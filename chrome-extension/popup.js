@@ -3,15 +3,14 @@ const statusText = document.getElementById("status");
 const logout = document.getElementById("logout");
 const callTools = document.getElementById("call-tools");
 const callStatus = document.getElementById("call-status");
-const endCall = document.getElementById("end-call");
 const FIRESTORE_USER_URL = "https://firestore.googleapis.com/v1/projects/csr-support-system/databases/(default)/documents/users";
 
 function refreshCallStatus() {
   chrome.runtime.sendMessage({ type: "GET_CALL_STATUS" }, (response) => {
     if (chrome.runtime.lastError) return;
     callStatus.textContent = response?.status === "ready"
-      ? `${response.characters.toLocaleString()} transcript characters captured.`
-      : "No transcript captured yet.";
+      ? `${response.characters.toLocaleString()} live agent transcript characters captured. Audio reports save automatically when the Maqsam call ends.`
+      : "Live coaching and call recording start automatically on the Maqsam dialer.";
   });
 }
 
@@ -55,18 +54,5 @@ form.addEventListener("submit", async (event) => {
 logout.addEventListener("click", async () => {
   await chrome.storage.session.remove("authSession");
   await renderSession();
-});
-
-endCall.addEventListener("click", () => {
-  endCall.disabled = true;
-  callStatus.textContent = "Sending the complete transcript for analysis...";
-  chrome.runtime.sendMessage({ type: "END_CALL_ANALYSIS" }, (response) => {
-    endCall.disabled = false;
-    if (chrome.runtime.lastError || response?.status === "error") {
-      callStatus.textContent = response?.message || "Unable to complete the after-call analysis.";
-      return;
-    }
-    callStatus.textContent = "After-call report saved for Team Lead and Quality.";
-  });
 });
 renderSession();

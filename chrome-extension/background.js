@@ -6,6 +6,7 @@ const AI_WORKER_URL = "https://aquadesk-ai.aquadesk-support.workers.dev";
 const FIRESTORE_BASE_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
 const FIRESTORE_COMMIT_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:commit`;
 const CALL_TRANSCRIPT_KEY = "activeCallTranscript";
+let activeRecording = null;
 
 function generateFirestoreId() {
   const chars =
@@ -438,11 +439,37 @@ async function appendTranscript(transcript) {
   return combined;
 }
 
-async function analyzeAfterCall(transcript, bannedPhrases, kbArticles, qualityFlags, agentContext) {
+function formatTranscriptEntry(transcript, speaker = "", source = "") {
+  const normalized = String(transcript || "").trim();
+  if (!normalized) return "";
+  if (speaker) return `[${speaker}] ${normalized}`;
+  if (source === "agent_live_capture") return `[Agent live capture] ${normalized}`;
+  if (source === "maqsam_live_caption") return `[Maqsam live caption] ${normalized}`;
+  return normalized;
+}
+
+async function analyzeAfterCall(
+  transcript,
+  bannedPhrases,
+  kbArticles,
+  qualityFlags,
+  agentContext,
+  transcriptSource = "agent_live_capture",
+  recording = {},
+) {
   const response = await fetch(AI_WORKER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ transcript, bannedPhrases, kbArticles, qualityFlags }),
+    body: JSON.stringify({
+      transcript,
+      transcriptSource,
+      audioBase64: recording.audioBase64 || "",
+      audioMimeType: recording.audioMimeType || "",
+      audioFileName: recording.audioFileName || "",
+      bannedPhrases,
+      kbArticles,
+      qualityFlags,
+    }),
   });
 
   const data = await response.json();
@@ -491,7 +518,8 @@ async function writeAfterCallReport(report) {
             incorrectInformation: jsonField(report.incorrectInformation),
             recommendations: jsonField(report.recommendations),
             status: { stringValue: "open" },
-            source: { stringValue: "extension_after_call" },
+            source: { stringValue: report.source || "extension_after_call" },
+            transcriptSource: { stringValue: report.transcriptSource || "agent_live_capture" },
           },
         },
         updateTransforms: [{ fieldPath: "createdAt", setToServerValue: "REQUEST_TIME" }],
@@ -502,9 +530,9 @@ async function writeAfterCallReport(report) {
   return documentId;
 }
 
-async function finishCallAndAnalyze() {
-  const transcript = await getActiveTranscript();
-  if (!transcript) throw new Error("No transcript has been captured for this call.");
+async function finishCallAndAnalyze(overrideTranscript = "", transcriptSource = "agent_live_capture", recording = {}) {
+  const transcript = String(overrideTranscript || "").trim() || await getActiveTranscript();
+  if (!transcript && !recording.audioBase64) throw new Error("No transcript or recording has been captured for this call.");
 
   const agentContext = await getAgentContext();
   const [bannedPhrases, kbArticles, qualityFlags] = await Promise.all([
@@ -512,11 +540,56 @@ async function finishCallAndAnalyze() {
     getKbArticles(),
     getQualityFlagsForAgent(agentContext.agentId),
   ]);
-  const report = await analyzeAfterCall(transcript, bannedPhrases, kbArticles, qualityFlags, agentContext);
+  const report = await analyzeAfterCall(transcript, bannedPhrases, kbArticles, qualityFlags, agentContext, transcriptSource, recording);
   report.transcript = transcript;
+  report.transcriptSource = transcriptSource;
+  report.source = transcriptSource === "maqsam_tab_audio" ? "maqsam_tab_audio_capture" : transcriptSource === "maqsam_post_call_transcript" ? "maqsam_after_call_import" : "extension_after_call";
   const reportId = await writeAfterCallReport(report);
-  await chrome.storage.session.remove(CALL_TRANSCRIPT_KEY);
+  if (!overrideTranscript) await chrome.storage.session.remove(CALL_TRANSCRIPT_KEY);
   return { reportId, summary: report.summary, severity: report.severity };
+}
+
+function chromeCallback(fn) {
+  return new Promise((resolve, reject) => {
+    fn((result) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(result);
+    });
+  });
+}
+
+async function ensureOffscreenDocument() {
+  if (await chrome.offscreen.hasDocument()) return;
+  await chrome.offscreen.createDocument({
+    url: "offscreen.html",
+    reasons: ["USER_MEDIA"],
+    justification: "Record Maqsam tab audio for automatic after-call quality reports.",
+  });
+}
+
+async function startMaqsamRecording(tabId) {
+  if (activeRecording?.tabId === tabId) return;
+  await ensureOffscreenDocument();
+  const streamId = await chromeCallback((callback) =>
+    chrome.tabCapture.getMediaStreamId({ targetTabId: tabId }, callback)
+  );
+  const response = await chrome.runtime.sendMessage({ type: "START_TAB_RECORDING", streamId });
+  if (response?.status === "error") throw new Error(response.message || "Could not start call recording.");
+  activeRecording = { tabId, startedAt: Date.now() };
+  await chrome.storage.session.remove(CALL_TRANSCRIPT_KEY);
+  console.log("AquaDesk: started Maqsam tab recording.");
+}
+
+async function stopMaqsamRecordingAndAnalyze(tabId) {
+  if (!activeRecording || activeRecording.tabId !== tabId) return;
+  const recording = await chrome.runtime.sendMessage({ type: "STOP_TAB_RECORDING" });
+  activeRecording = null;
+  if (recording?.status === "error") throw new Error(recording.message || "Could not stop call recording.");
+  await finishCallAndAnalyze("", "maqsam_tab_audio", recording?.status === "ready" ? recording : {});
+  console.log("AquaDesk: saved automatic Maqsam audio report.");
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -532,14 +605,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === "END_CALL_ANALYSIS") {
-    finishCallAndAnalyze()
+    finishCallAndAnalyze(request.transcript, request.transcriptSource || "agent_live_capture")
       .then((result) => sendResponse({ status: "complete", ...result }))
       .catch((error) => sendResponse({ status: "error", message: error.message }));
     return true;
   }
 
+  if (request.type === "MAQSAM_CALL_STATE") {
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+      sendResponse({ status: "ignored" });
+      return true;
+    }
+
+    const action = request.active
+      ? startMaqsamRecording(tabId)
+      : stopMaqsamRecordingAndAnalyze(tabId);
+    action
+      .then(() => sendResponse({ status: "complete" }))
+      .catch((error) => {
+        console.error("Maqsam recording state error:", error);
+        sendResponse({ status: "error", message: error.message });
+      });
+    return true;
+  }
+
   if (request.type === "CHECK_TRANSCRIPT") {
-    const transcript = String(request.payload || "").trim();
+    const transcript = formatTranscriptEntry(request.payload, request.speaker, request.source);
 
     if (!transcript) {
       sendResponse({ status: "ignored" });

@@ -23,18 +23,16 @@ test.each([
   [ActionTypesManager, "Refund", deleteActionType, "a"],
   [BannedPhrasesManager, /Go away/, deleteBannedPhrase, "b"],
   [KnowledgeBaseForm, "Move In", deletePolicy, "c"],
-])("%s requires confirmation before deleting", async (Manager, name, remove, id) => {
+])("%s requires in-app confirmation before deleting", async (Manager, name, remove, id) => {
   remove.mockClear();
-  const confirm = jest.spyOn(window, "confirm").mockReturnValue(false);
-  try {
-    render(<Manager />);
-    fireEvent.click(screen.getByText(name));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    expect(confirm).toHaveBeenCalled();
-    expect(remove).not.toHaveBeenCalled();
-    confirm.mockReturnValue(true);
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    await waitFor(() => expect(remove).toHaveBeenCalledWith(id));
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument());
-  } finally { confirm.mockRestore(); }
+  render(<Manager />);
+  fireEvent.click(screen.getByText(name));
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  expect(screen.getByText(/This cannot be undone/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(remove).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  fireEvent.click(screen.getAllByRole("button", { name: "Delete" }).at(-1));
+  await waitFor(() => expect(remove).toHaveBeenCalledWith(id));
+  await waitFor(() => expect(screen.queryByText(/This cannot be undone/)).not.toBeInTheDocument());
 });

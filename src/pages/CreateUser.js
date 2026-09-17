@@ -22,6 +22,7 @@ export default function CreateUser() {
   const [editForm, setEditForm] = useState({ name: "", email: "", role: "agent", disabled: false });
   const [editingEmail, setEditingEmail] = useState("");
   const [savingUserId, setSavingUserId] = useState(null);
+  const [deactivateTarget, setDeactivateTarget] = useState(null);
   const [userView, setUserView] = useState("active");
   const [roleFilter, setRoleFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -141,22 +142,27 @@ export default function CreateUser() {
     }
   };
 
-  const handleDeactivateUser = async (user) => {
+  const handleDeactivateUser = (user) => {
     if (user.id === currentUser?.uid) {
       setError("You cannot deactivate your own account. Ask another Team Lead to change your access.");
       return;
     }
-    if (!window.confirm(`Deactivate ${getUserDisplayName(user)}? This removes portal access in AquaDesk but does not delete the Firebase Auth login.`)) return;
-    setSavingUserId(user.id);
+    setDeactivateTarget(user);
+  };
+
+  const confirmDeactivateUser = async () => {
+    if (!deactivateTarget) return;
+    setSavingUserId(deactivateTarget.id);
     setError("");
 
     try {
-      await updateUserProfile(user.id, {
+      await updateUserProfile(deactivateTarget.id, {
         role: "disabled",
-        previousRole: user.role === "disabled" ? user.previousRole || "agent" : user.role || "agent",
+        previousRole: deactivateTarget.role === "disabled" ? deactivateTarget.previousRole || "agent" : deactivateTarget.role || "agent",
         disabled: true,
       });
-      setMessage(`Deactivated ${getUserDisplayName(user)}.`);
+      setMessage(`Deactivated ${getUserDisplayName(deactivateTarget)}.`);
+      setDeactivateTarget(null);
     } catch (deactivateError) {
       console.error(deactivateError);
       setError("Failed to deactivate user profile.");
@@ -458,6 +464,24 @@ export default function CreateUser() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+      {deactivateTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-md rounded-card border border-surface-border bg-surface-card p-6 shadow-2xl">
+            <h2 className="text-xl font-extrabold text-slate-950">Deactivate account?</h2>
+            <p className="mt-2 text-sm leading-6 text-semantic-neutral">
+              Deactivate {getUserDisplayName(deactivateTarget)}? This removes AquaDesk portal access but does not delete the Firebase Auth login.
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={() => setDeactivateTarget(null)} className="btn-secondary px-4 text-sm font-bold">
+                Cancel
+              </button>
+              <button type="button" onClick={confirmDeactivateUser} disabled={savingUserId === deactivateTarget.id} className="min-h-[48px] rounded-2xl bg-semantic-error px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-red-600 disabled:opacity-50">
+                {savingUserId === deactivateTarget.id ? "Deactivating..." : "Deactivate"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

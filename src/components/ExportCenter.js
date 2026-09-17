@@ -23,11 +23,46 @@ const EXPORTS = [
   ["action_types", "Support Topics", getActionTypes],
 ];
 
-function normalizeValue(value) {
+const DATE_FIELDS = ["timestamp", "createdAt", "updatedAt", "reviewedAt", "usedAt", "passwordChangedAt"];
+
+function asDate(value) {
+  if (!value) return null;
+  const candidate = value?.toDate ? value.toDate() : value instanceof Date ? value : new Date(value);
+  return Number.isNaN(candidate.getTime()) ? null : candidate;
+}
+
+function getExportDate(row) {
+  return DATE_FIELDS
+    .map((field) => asDate(row[field]))
+    .filter(Boolean)
+    .sort((a, b) => b.getTime() - a.getTime())[0] || null;
+}
+
+function isWithinExportRange(row, startDate, endDate) {
+  if (!startDate && !endDate) return true;
+  const rowDate = getExportDate(row);
+  if (!rowDate) return false;
+  if (startDate && rowDate < new Date(`${startDate}T00:00:00`)) return false;
+  if (endDate && rowDate > new Date(`${endDate}T23:59:59.999`)) return false;
+  return true;
+}
+
+function normalizeValue(value, seen = new WeakSet(), depth = 0) {
   if (value?.toDate) return value.toDate().toISOString();
-  if (Array.isArray(value)) return value.map(normalizeValue);
+  if (value instanceof Date) return value.toISOString();
+  if (value?.path && typeof value.path === "string") return value.path;
+  if (Array.isArray(value)) {
+    if (depth > 8) return "[Max depth reached]";
+    return value.map((item) => normalizeValue(item, seen, depth + 1));
+  }
   if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalizeValue(item)]));
+    if (seen.has(value)) return "[Circular reference]";
+    if (depth > 8) return "[Max depth reached]";
+    seen.add(value);
+    if (value.constructor && value.constructor !== Object) {
+      return String(value);
+    }
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalizeValue(item, seen, depth + 1)]));
   }
   return value ?? "";
 }
@@ -61,12 +96,14 @@ export default function ExportCenter() {
   const [loadingKey, setLoadingKey] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   const loadAllData = async () => {
     const entries = await Promise.all(
       EXPORTS.map(async ([key, label, loader]) => {
-        const rows = await loader();
-        return [key, { label, rows: rows.map(normalizeValue) }];
+        const rows = (await loader()).filter((row) => isWithinExportRange(row, startDate, endDate));
+        return [key, { label, rows: rows.map((row) => normalizeValue(row)) }];
       })
     );
     return Object.fromEntries(entries);
@@ -77,8 +114,8 @@ export default function ExportCenter() {
     setStatus("");
     setError("");
     try {
-      const rows = (await loader()).map(normalizeValue);
-      downloadFile(`aquadesk-${key}.csv`, rowsToCsv(rows), "text/csv;charset=utf-8");
+      const rows = (await loader()).filter((row) => isWithinExportRange(row, startDate, endDate));
+      downloadFile(`aquadesk-${key}.csv`, rowsToCsv(rows.map((row) => normalizeValue(row))), "text/csv;charset=utf-8");
       setStatus(`Exported ${rows.length} ${label.toLowerCase()} records.`);
     } catch (err) {
       console.error(`Failed to export ${key}:`, err);
@@ -119,10 +156,26 @@ export default function ExportCenter() {
             Download operational data for Team Lead and Quality review: tickets, support requests, flags, reports, users, and setup records.
           </p>
         </div>
-        <button type="button" onClick={exportEverything} disabled={Boolean(loadingKey)} className="btn-primary px-5 text-sm">
-          {loadingKey === "all" ? "Exporting..." : "Export Everything"}
-        </button>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div>
+            <label className="label-field">From</label>
+            <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="input-field min-w-[160px]" />
+          </div>
+          <div>
+            <label className="label-field">To</label>
+            <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="input-field min-w-[160px]" />
+          </div>
+          <button type="button" onClick={() => { setStartDate(""); setEndDate(""); }} className="btn-secondary px-4 text-sm font-bold">
+            Clear Dates
+          </button>
+          <button type="button" onClick={exportEverything} disabled={Boolean(loadingKey)} className="btn-primary px-5 text-sm">
+            {loadingKey === "all" ? "Exporting..." : "Export Everything"}
+          </button>
+        </div>
       </div>
+      <p className="-mt-3 mb-5 text-xs font-semibold text-semantic-neutral">
+        Date range uses the newest available record date, such as created, updated, reviewed, or call timestamp.
+      </p>
 
       {status && (
         <div className="mb-5 rounded-xl border border-semantic-success/30 bg-semantic-success/15 p-4 text-sm font-semibold text-semantic-success">

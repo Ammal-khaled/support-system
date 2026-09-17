@@ -89,6 +89,7 @@ export default function KnowledgeBaseForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     const unsubscribe = subscribePolicies(
@@ -182,15 +183,15 @@ export default function KnowledgeBaseForm() {
   };
 
   const handleDeletePolicy = async () => {
-    if (!selectedPolicy) return;
-    if (!window.confirm(`Delete policy "${selectedPolicy.title}"? This cannot be undone.`)) return;
-    const success = await deletePolicy(selectedPolicy.id);
+    if (!deleteTarget) return;
+    const success = await deletePolicy(deleteTarget.id);
     if (success) {
       clearForm();
       setStatus("Policy deleted.");
     } else {
       setError("Could not delete the policy. Please try again.");
     }
+    setDeleteTarget(null);
   };
 
   const visiblePolicies = policies.filter((policy) => {
@@ -296,7 +297,7 @@ export default function KnowledgeBaseForm() {
 
           <div className="mt-7 flex flex-wrap justify-end gap-2 border-t border-surface-border pt-5">
             {selectedPolicy && (
-              <button type="button" onClick={handleDeletePolicy} className="btn-danger">Delete</button>
+              <button type="button" onClick={() => setDeleteTarget(selectedPolicy)} className="btn-danger">Delete</button>
             )}
             <button type="button" onClick={clearForm} className="btn-secondary">Clear</button>
             <button type="submit" disabled={saving} className="btn-primary px-6">
@@ -344,6 +345,24 @@ export default function KnowledgeBaseForm() {
           </ul>
         )}
       </div>
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-md rounded-card border border-surface-border bg-surface-card p-6 shadow-2xl">
+            <h3 className="text-xl font-extrabold text-slate-950">Delete policy?</h3>
+            <p className="mt-2 text-sm leading-6 text-semantic-neutral">
+              Delete policy "{deleteTarget.title}"? This cannot be undone.
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={() => setDeleteTarget(null)} className="btn-secondary px-4 text-sm font-bold">
+                Cancel
+              </button>
+              <button type="button" onClick={handleDeletePolicy} className="btn-danger">
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
 let recognition;
 let isRecognitionRunning = false;
 let lastCaptionText = "";
+let lastCallActiveState = null;
 
 function escapeHtml(value) {
   return String(value || "").replace(/[&<>'"]/g, (character) => ({
@@ -59,15 +60,61 @@ function showWarningModal(message, knowledgeBaseUrl) {
   });
 }
 
-chrome.runtime.onMessage.addListener((request) => {
-  if (request.type !== "SHOW_WARNING") return;
+function cleanTranscriptText(text) {
+  return String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, 50000);
+}
+
+function extractMaqsamTranscriptFromPage() {
+  const transcriptSelectors = [
+    "[data-testid*='transcript' i]",
+    "[aria-label*='transcript' i]",
+    "[class*='transcript' i]",
+    "[id*='transcript' i]",
+    "[class*='conversation' i]",
+    "[class*='caption' i]",
+  ];
+  const candidates = transcriptSelectors
+    .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+    .map((node) => cleanTranscriptText(node.textContent))
+    .filter((text) => text.length > 80)
+    .sort((a, b) => b.length - a.length);
+
+  if (candidates[0]) return candidates[0];
+
+  const speakerLinePattern = /\b(agent|customer|client|caller|representative|support)\b\s*[:\-]/i;
+  const timeLinePattern = /\b\d{1,2}:\d{2}(?::\d{2})?\b/;
+  const pageLines = cleanTranscriptText(document.body?.innerText || "")
+    .split("\n")
+    .filter((line) => speakerLinePattern.test(line) || timeLinePattern.test(line));
+
+  return cleanTranscriptText(pageLines.join("\n"));
+}
+
+chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+  if (request.type === "EXTRACT_MAQSAM_TRANSCRIPT") {
+    const transcript = extractMaqsamTranscriptFromPage();
+    sendResponse({
+      status: transcript ? "ready" : "missing",
+      transcript,
+      characters: transcript.length,
+    });
+    return true;
+  }
+
+  if (request.type !== "SHOW_WARNING") return false;
 
   if (request.severity === "critical") {
     showWarningModal(request.message, request.knowledgeBaseUrl);
-    return;
+    return false;
   }
 
   console.log("CSR Support Extension: soft-skill flag logged without interrupting the agent.", request);
+  return false;
 });
 
 function startRecognition() {
@@ -100,7 +147,9 @@ function startRecognition() {
 
       chrome.runtime.sendMessage({
         type: "CHECK_TRANSCRIPT",
-        payload: currentText
+        payload: currentText,
+        speaker: "agent",
+        source: "agent_live_capture",
       });
     }
   };
@@ -140,7 +189,8 @@ async function sendCaptionText(text) {
   lastCaptionText = normalizedText;
   chrome.runtime.sendMessage({
     type: "CHECK_TRANSCRIPT",
-    payload: normalizedText
+    payload: normalizedText,
+    source: "maqsam_live_caption",
   });
 }
 
@@ -161,5 +211,47 @@ function startCaptionObserver() {
   });
 }
 
+function detectCallActive() {
+  if (!location.hostname.includes("maqsam.com") || !location.pathname.startsWith("/phone/dialer")) return null;
+  const buttons = Array.from(document.querySelectorAll("button, [role='button'], a"));
+  const hasHangupControl = buttons.some((node) => {
+    const text = String(node.innerText || node.getAttribute("aria-label") || node.title || "").toLowerCase();
+    return /\b(end|hang\s*up|hangup|disconnect|finish|terminate|drop)\b/.test(text) && /\b(call|dial|conversation)?\b/.test(text);
+  });
+  const pageText = String(document.body?.innerText || "").toLowerCase();
+  const endedSignal = /\b(call ended|call finished|conversation ended|wrap up|after call|call completed|disconnected|ended)\b/.test(pageText);
+  const liveSignal = /\b(live call|in call|ongoing call|connected|ringing|dialing|on call|mute|hold|keypad)\b/.test(pageText);
+
+  if (hasHangupControl || (liveSignal && !endedSignal)) return true;
+  if (endedSignal) return false;
+  return null;
+}
+
+function publishCallState() {
+  const active = detectCallActive();
+  if (active === null || active === lastCallActiveState) return;
+  lastCallActiveState = active;
+  chrome.runtime.sendMessage({
+    type: "MAQSAM_CALL_STATE",
+    active,
+    source: "maqsam_dialer_dom",
+  });
+}
+
+function startCallStateObserver() {
+  if (!location.hostname.includes("maqsam.com") || !location.pathname.startsWith("/phone/dialer")) return;
+  publishCallState();
+  const observer = new MutationObserver(publishCallState);
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ["aria-label", "title", "class"],
+  });
+  window.setInterval(publishCallState, 3000);
+}
+
 startCaptionObserver();
+startCallStateObserver();
 startRecognition();

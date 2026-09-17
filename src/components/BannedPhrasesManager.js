@@ -26,6 +26,7 @@ export default function BannedPhrasesManager() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     const unsubscribe = subscribeBannedPhrases(
@@ -79,11 +80,11 @@ export default function BannedPhrasesManager() {
   };
 
   const handleDelete = async () => {
-    if (!selected) return;
-    if (!window.confirm(`Delete phrase "${selected.wrongPhrase}"? This cannot be undone.`)) return;
-    const success = await deleteBannedPhrase(selected.id);
+    if (!deleteTarget) return;
+    const success = await deleteBannedPhrase(deleteTarget.id);
     if (success) clearForm();
     else setError("Could not delete the phrase. Please try again.");
+    setDeleteTarget(null);
   };
 
   const visiblePhrases = phrases.filter((phrase) => {
@@ -160,7 +161,7 @@ export default function BannedPhrasesManager() {
 
           <div className="flex flex-wrap justify-end gap-2 pt-2">
             {selected && (
-              <button type="button" onClick={handleDelete} className="min-h-[48px] rounded-2xl bg-semantic-error px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-red-600">
+              <button type="button" onClick={() => setDeleteTarget(selected)} className="min-h-[48px] rounded-2xl bg-semantic-error px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-red-600">
                 Delete
               </button>
             )}
@@ -225,6 +226,24 @@ export default function BannedPhrasesManager() {
           </ul>
         )}
       </div>
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-md rounded-card border border-surface-border bg-surface-card p-6 shadow-2xl">
+            <h3 className="text-xl font-extrabold text-slate-950">Delete flag rule?</h3>
+            <p className="mt-2 text-sm leading-6 text-semantic-neutral">
+              Delete phrase "{deleteTarget.wrongPhrase}"? This cannot be undone.
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={() => setDeleteTarget(null)} className="btn-secondary px-4 text-sm font-bold">
+                Cancel
+              </button>
+              <button type="button" onClick={handleDelete} className="min-h-[48px] rounded-2xl bg-semantic-error px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-red-600">
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
