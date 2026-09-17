@@ -8,6 +8,7 @@ import AgentActionsFeed from "../components/AgentActionsFeed";
 import FlagsFeed from "../components/FlagsFeed";
 import KnowledgeBaseForm from "../components/KnowledgeBaseForm";
 import AfterCallReportsFeed from "../components/AfterCallReportsFeed";
+import ExportCenter from "../components/ExportCenter";
 import {
   subscribeAgentActions,
   subscribeFlags,
@@ -19,6 +20,7 @@ const BASE_MANAGEMENT_TABS = [
   "Support Requests",
   "Support Topics",
   "Knowledge",
+  "Export Center",
 ];
 
 function Metric({
@@ -383,6 +385,10 @@ export default function TeamLeadDashboard() {
           {/* Knowledge */}
           {managementTab === "Knowledge" && (
             <KnowledgeBaseForm />
+          )}
+
+          {managementTab === "Export Center" && (
+            <ExportCenter />
           )}
 
         </div>

@@ -20,13 +20,37 @@ function showWarningModal(message, knowledgeBaseUrl) {
   modal.id = "csr-warning-box";
   modal.className = "csr-warning-modal";
   modal.innerHTML = `
-    <h3 style="color: #dc2626; font-weight: bold; margin-bottom: 8px;">Compliance Alert</h3>
-    <p style="color: #374151; font-size: 14px; margin-bottom: 12px;">${escapeHtml(message)}</p>
-    ${knowledgeBaseUrl ? `<a href="${escapeHtml(knowledgeBaseUrl)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; color: #4f46e5; font-size: 14px; font-weight: bold; margin-bottom: 12px;">Open Knowledge Base</a>` : ""}
-    <button id="csr-dismiss-btn" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">
-      Acknowledge
-    </button>
+    <div style="display: flex; align-items: flex-start; gap: 14px;">
+      <div style="display: flex; width: 42px; height: 42px; align-items: center; justify-content: center; border-radius: 14px; background: #fee2e2; color: #dc2626; font-size: 22px; font-weight: 900;">!</div>
+      <div style="min-width: 0; flex: 1;">
+        <p style="margin: 0 0 4px; color: #64748b; font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;">Live call guidance</p>
+        <h3 style="color: #0f172a; font-size: 20px; line-height: 1.2; font-weight: 800; margin: 0 0 10px;">Correct this answer before continuing</h3>
+        <p style="color: #334155; font-size: 14px; line-height: 1.55; margin: 0 0 16px;">${escapeHtml(message)}</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+          ${knowledgeBaseUrl ? `<a href="${escapeHtml(knowledgeBaseUrl)}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; justify-content: center; min-height: 40px; border-radius: 12px; background: #0089bf; color: white; padding: 0 14px; text-decoration: none; font-size: 13px; font-weight: 800;">Open correct knowledge card</a>` : ""}
+          <button id="csr-dismiss-btn" style="min-height: 40px; border-radius: 12px; border: 1px solid #cbd5e1; background: white; color: #475569; padding: 0 14px; cursor: pointer; font-size: 13px; font-weight: 800;">
+            Acknowledge
+          </button>
+        </div>
+      </div>
+    </div>
   `;
+
+  modal.style.cssText = [
+    "position: fixed",
+    "right: 24px",
+    "top: 24px",
+    "z-index: 2147483647",
+    "width: min(420px, calc(100vw - 48px))",
+    "box-sizing: border-box",
+    "border: 1px solid #fecaca",
+    "border-left: 6px solid #ef4444",
+    "border-radius: 20px",
+    "background: rgba(255,255,255,.98)",
+    "box-shadow: 0 24px 70px rgba(15,23,42,.28)",
+    "padding: 18px",
+    "font-family: Inter, Arial, sans-serif",
+  ].join(";");
 
   document.body.appendChild(modal);
 

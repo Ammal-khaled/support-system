@@ -49,13 +49,22 @@ function normalizeResult(result) {
       ? result.isCompliant
       : result.overallStatus === "clear",
     feedback: String(feedback || result.summary || "Review this interaction for empathy and ownership."),
-    severity: "soft_skill",
+    severity: result.severity || "soft_skill",
+    summary: result.summary || "",
+    overallStatus: result.overallStatus || "",
+    softSkills: result.softSkills || {},
+    bannedPhrases: Array.isArray(result.bannedPhrases) ? result.bannedPhrases : [],
+    incorrectInformation: Array.isArray(result.incorrectInformation) ? result.incorrectInformation : [],
+    recommendations: Array.isArray(result.recommendations) ? result.recommendations : [],
   };
 }
 
 export async function analyzeSoftSkills(transcriptSnippet, context = {}) {
-  if (typeof transcriptSnippet !== "string" || !transcriptSnippet.trim()) {
-    throw new Error("Transcript snippet is required.");
+  const hasTranscript = typeof transcriptSnippet === "string" && transcriptSnippet.trim();
+  const hasAudio = context.audioBase64 && context.audioMimeType;
+
+  if (!hasTranscript && !hasAudio) {
+    throw new Error("Transcript text or an audio recording is required.");
   }
 
   if (!AI_WORKER_URL) {
@@ -70,7 +79,10 @@ export async function analyzeSoftSkills(transcriptSnippet, context = {}) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        transcriptSnippet: transcriptSnippet.trim(),
+        transcriptSnippet: hasTranscript ? transcriptSnippet.trim() : "",
+        audioBase64: context.audioBase64 || "",
+        audioMimeType: context.audioMimeType || "",
+        audioFileName: context.audioFileName || "",
         bannedPhrases: Array.isArray(context.bannedPhrases) ? context.bannedPhrases : [],
         kbArticles: Array.isArray(context.kbArticles) ? context.kbArticles : [],
         qualityFlags: Array.isArray(context.qualityFlags) ? context.qualityFlags : [],

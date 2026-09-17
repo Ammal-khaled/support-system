@@ -5,8 +5,10 @@ import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db, firebaseConfig } from "../firebase";
 import Sidebar from "../components/Sidebar";
 import { subscribeUsers, updateUserProfile } from "../services/firestore";
+import { useAuth } from "../context/AuthContext";
 
 export default function CreateUser() {
+  const { currentUser } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -103,6 +105,10 @@ export default function CreateUser() {
   const handleUpdateUser = async (event) => {
     event.preventDefault();
     if (!editingUser) return;
+    if (editingUser.id === currentUser?.uid && editForm.disabled) {
+      setError("You cannot deactivate your own Team Lead account while signed in.");
+      return;
+    }
     setSavingUserId(editingUser.id);
     setError("");
     setMessage("");
@@ -134,6 +140,10 @@ export default function CreateUser() {
   };
 
   const handleDeactivateUser = async (user) => {
+    if (user.id === currentUser?.uid) {
+      setError("You cannot deactivate your own account. Ask another Team Lead to change your access.");
+      return;
+    }
     if (!window.confirm(`Deactivate ${getUserDisplayName(user)}? This removes portal access in AquaDesk but does not delete the Firebase Auth login.`)) return;
     setSavingUserId(user.id);
     setError("");
@@ -370,8 +380,8 @@ export default function CreateUser() {
                         >
                           Edit
                         </button>
-                        <button type="button" disabled={savingUserId === user.id || user.disabled} onClick={() => handleDeactivateUser(user)} className="rounded-xl bg-semantic-error px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                          Deactivate
+                        <button type="button" disabled={savingUserId === user.id || user.disabled || user.id === currentUser?.uid} onClick={() => handleDeactivateUser(user)} className="rounded-xl bg-semantic-error px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                          {user.id === currentUser?.uid ? "Current User" : "Deactivate"}
                         </button>
                         {userView === "hidden" && (
                           <button type="button" disabled={savingUserId === user.id} onClick={() => handleReactivateUser(user)} className="rounded-xl bg-semantic-success px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
@@ -426,6 +436,7 @@ export default function CreateUser() {
                 <input
                   type="checkbox"
                   checked={editForm.disabled}
+                  disabled={editingUser.id === currentUser?.uid}
                   onChange={(event) => setEditForm((current) => ({
                     ...current,
                     disabled: event.target.checked,

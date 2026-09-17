@@ -57,12 +57,18 @@ export default {
     }
 
     let transcript;
+    let audioBase64 = "";
+    let audioMimeType = "";
+    let audioFileName = "";
     let bannedPhrases = [];
     let kbArticles = [];
     let qualityFlags = [];
     try {
       const body = await request.json();
       transcript = body.transcript || body.transcriptSnippet;
+      audioBase64 = typeof body.audioBase64 === "string" ? body.audioBase64 : "";
+      audioMimeType = typeof body.audioMimeType === "string" ? body.audioMimeType : "";
+      audioFileName = typeof body.audioFileName === "string" ? body.audioFileName : "";
       bannedPhrases = Array.isArray(body.bannedPhrases) ? body.bannedPhrases : [];
       kbArticles = Array.isArray(body.kbArticles) ? body.kbArticles : [];
       qualityFlags = Array.isArray(body.qualityFlags) ? body.qualityFlags : [];
@@ -70,12 +76,16 @@ export default {
       return jsonResponse({ error: "Request body must be valid JSON" }, 400, request);
     }
 
-    if (typeof transcript !== "string" || !transcript.trim()) {
-      return jsonResponse({ error: "transcript is required" }, 400, request);
+    if ((typeof transcript !== "string" || !transcript.trim()) && !audioBase64) {
+      return jsonResponse({ error: "transcript or audio recording is required" }, 400, request);
     }
 
-    if (transcript.length > 50000) {
+    if (typeof transcript === "string" && transcript.length > 50000) {
       return jsonResponse({ error: "transcript is too long" }, 400, request);
+    }
+
+    if (audioBase64 && audioBase64.length > 18000000) {
+      return jsonResponse({ error: "audio recording is too large" }, 400, request);
     }
 
     if (!env.GEMINI_API_KEY) {
@@ -90,12 +100,25 @@ export default {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: systemPrompt }] },
-            contents: [{ parts: [{ text: JSON.stringify({
-              transcript: transcript.trim(),
-              bannedPhrases,
-              kbArticles,
-              qualityFlags,
-            }) }] }],
+            contents: [{
+              parts: [
+                {
+                  text: JSON.stringify({
+                    transcript: typeof transcript === "string" ? transcript.trim() : "",
+                    audioFileName,
+                    instruction: audioBase64
+                      ? "Transcribe the uploaded call recording first, then perform the quality review using the supplied policy context."
+                      : "Perform the quality review using the supplied transcript and policy context.",
+                    bannedPhrases,
+                    kbArticles,
+                    qualityFlags,
+                  }),
+                },
+                ...(audioBase64 && audioMimeType
+                  ? [{ inline_data: { mime_type: audioMimeType, data: audioBase64 } }]
+                  : []),
+              ],
+            }],
             generationConfig: {
               temperature: 0.2,
               responseMimeType: "application/json",

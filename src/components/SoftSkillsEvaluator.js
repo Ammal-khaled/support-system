@@ -7,10 +7,42 @@ const sampleTranscript =
 
 export default function SoftSkillsEvaluator() {
   const [transcript, setTranscript] = useState(sampleTranscript);
+  const [recording, setRecording] = useState(null);
   const [result, setResult] = useState(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const fileToBase64 = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const value = String(reader.result || "");
+        resolve(value.includes(",") ? value.split(",").pop() : value);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  const handleFileUpload = async (file) => {
+    setRecording(null);
+    setError("");
+    if (!file) return;
+
+    if (file.type.startsWith("text/") || /\.(txt|vtt|srt)$/i.test(file.name)) {
+      setTranscript(await file.text());
+      setStatus(`Loaded transcript file: ${file.name}`);
+      return;
+    }
+
+    if (!file.type.startsWith("audio/") && !/\.(mp3|wav|m4a|webm|ogg)$/i.test(file.name)) {
+      setError("Upload a transcript text file or an audio recording.");
+      return;
+    }
+
+    setRecording(file);
+    setStatus(`Recording ready for AI analysis: ${file.name}`);
+  };
 
   const handleEvaluate = async (event) => {
     event.preventDefault();
@@ -25,14 +57,22 @@ export default function SoftSkillsEvaluator() {
         getPolicies(),
         getFlags(),
       ]);
+      const audioPayload = recording
+        ? {
+            audioBase64: await fileToBase64(recording),
+            audioMimeType: recording.type || "audio/mpeg",
+            audioFileName: recording.name,
+          }
+        : {};
       const analysis = await analyzeSoftSkills(transcript, {
+        ...audioPayload,
         bannedPhrases,
         kbArticles,
         qualityFlags: qualityFlags.slice(0, 25),
       });
 
       setResult(analysis);
-      setStatus("AI rule check completed. Nothing was saved to the review queue.");
+      setStatus("AI analysis completed. Nothing was saved to the review queue.");
     } catch (err) {
       console.error("Soft-skills evaluation failed:", err);
       setError(err.message || "AI coaching is unavailable. Check the Worker URL and deployment.");
@@ -50,7 +90,7 @@ export default function SoftSkillsEvaluator() {
             AI Rule Sandbox
           </h2>
           <p className="card-subtext max-w-2xl">
-            Paste a transcript sample to preview how the after-call AI reads your current flag rules and knowledge base. This is only a test and does not save a flag.
+            Paste a transcript or upload a call recording to preview how the after-call AI reads your current flag rules and knowledge base. This is only a test and does not save a flag.
           </p>
         </div>
         <span className="text-xs uppercase tracking-[0.18em] text-brand-primary border border-brand-primary/40 bg-brand-primary/15 px-3 py-2 rounded-xl font-semibold">
@@ -60,18 +100,31 @@ export default function SoftSkillsEvaluator() {
 
       <form onSubmit={handleEvaluate} className="space-y-5">
         <div>
+          <label className="label-field">Upload Recording or Transcript</label>
+          <input
+            type="file"
+            accept="audio/*,.mp3,.wav,.m4a,.webm,.ogg,.txt,.vtt,.srt,text/plain"
+            onChange={(event) => handleFileUpload(event.target.files?.[0])}
+            className="input-field mt-2"
+          />
+          <p className="mt-2 text-xs font-semibold text-semantic-neutral">
+            Audio files are sent to AI for transcription and analysis. Text files load into the transcript box below.
+          </p>
+        </div>
+
+        <div>
           <label className="label-field">Transcript Sample</label>
           <textarea
             value={transcript}
             onChange={(event) => setTranscript(event.target.value)}
             rows={7}
             className="input-field resize-y"
-            required
+            required={!recording}
           />
         </div>
 
         <button type="submit" disabled={submitting} className="btn-primary px-8">
-          {submitting ? "Analyzing..." : "Test AI Rules"}
+          {submitting ? "Analyzing..." : recording ? "Analyze Recording" : "Test AI Rules"}
         </button>
       </form>
 
@@ -104,6 +157,33 @@ export default function SoftSkillsEvaluator() {
             </span>
           </div>
           <p className="text-semantic-neutral leading-relaxed">{result.feedback}</p>
+          {result.summary && (
+            <p className="mt-3 text-sm font-semibold text-slate-900">{result.summary}</p>
+          )}
+          {result.incorrectInformation?.length > 0 && (
+            <div className="mt-4 rounded-xl border border-semantic-error/20 bg-semantic-error/10 p-4">
+              <p className="label-field text-semantic-error">Wrong info</p>
+              <ul className="mt-2 space-y-2 text-sm text-semantic-neutral">
+                {result.incorrectInformation.map((item, index) => (
+                  <li key={`${item.claim || "wrong-info"}-${index}`}>
+                    <span className="font-bold text-slate-900">{item.claim || "Incorrect claim"}</span>
+                    {" -> "}
+                    {item.expected || item.correction || "Correct policy not provided."}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {result.recommendations?.length > 0 && (
+            <div className="mt-4">
+              <p className="label-field">Recommendations</p>
+              <ul className="mt-2 list-disc pl-5 text-sm text-semantic-neutral">
+                {result.recommendations.map((item, index) => (
+                  <li key={`${item}-${index}`}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </section>

@@ -6,6 +6,7 @@ import AfterCallReportsFeed from "../components/AfterCallReportsFeed";
 import BannedPhrasesManager from "../components/BannedPhrasesManager";
 import FlagsFeed from "../components/FlagsFeed";
 import SoftSkillsEvaluator from "../components/SoftSkillsEvaluator";
+import ExportCenter from "../components/ExportCenter";
 import { subscribeAgentActions, subscribeFlags } from "../services/firestore";
 
 const QUALITY_TAB_PARAMS = {
@@ -16,6 +17,7 @@ const QUALITY_TAB_PARAMS = {
   "Flag Rules": "rules",
   "AI Rule Sandbox": "sandbox",
   "Support Requests": "support",
+  "Export Center": "exports",
 };
 
 function getQualityTab(param) {
@@ -123,6 +125,7 @@ export default function QualityDashboard() {
                 "Flag Rules",
                 "AI Rule Sandbox",
                 "Support Requests",
+                "Export Center",
               ].map((item) => (
                 <button
                   key={item}
@@ -170,6 +173,8 @@ export default function QualityDashboard() {
           {tab === "Flag Rules" && <BannedPhrasesManager />}
 
           {tab === "AI Rule Sandbox" && <SoftSkillsEvaluator />}
+
+          {tab === "Export Center" && <ExportCenter />}
         </div>
       </main>
     </div>

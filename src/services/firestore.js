@@ -202,6 +202,9 @@ export const subscribeUsers = (callback, onError) =>
     (rows) => sortByText(rows, ["name", "email"])
   );
 
+export const getUsers = () =>
+  fetchCollection("users", (rows) => sortByText(rows, ["name", "email"]));
+
 export const updateUserProfile = async (id, updates) => {
   await updateDoc(doc(db, "users", id), {
     ...updates,
@@ -290,6 +293,32 @@ export const getFlags = () =>
       const bTime = b.timestamp?.toMillis?.() || 0;
       return bTime - aTime;
     })
+  );
+
+export const getAgentActions = () =>
+  fetchCollection("agent_actions", (rows) =>
+    [...rows].sort((a, b) => {
+      const aTime = a.timestamp?.toMillis?.() || 0;
+      const bTime = b.timestamp?.toMillis?.() || 0;
+      return bTime - aTime;
+    })
+  );
+
+export const getAfterCallReports = () =>
+  fetchCollection("after_call_reports", (rows) =>
+    [...rows]
+      .map((report) => ({
+        ...report,
+        softSkills: parseJsonField(report.softSkills, {}),
+        bannedPhrases: parseJsonField(report.bannedPhrases, []),
+        incorrectInformation: parseJsonField(report.incorrectInformation, []),
+        recommendations: parseJsonField(report.recommendations, []),
+      }))
+      .sort((a, b) => {
+        const aTime = a.createdAt?.toMillis?.() || 0;
+        const bTime = b.createdAt?.toMillis?.() || 0;
+        return bTime - aTime;
+      })
   );
 
 export const markFlagReviewed = async (id) => {
@@ -423,6 +452,15 @@ export const subscribeTickets = (callback, onError, agentId) => {
   );
 };
 
+export const getTickets = () =>
+  fetchCollection("tickets", (rows) =>
+    [...rows].sort((a, b) => {
+      const aTime = a.updatedAt?.toMillis?.() || 0;
+      const bTime = b.updatedAt?.toMillis?.() || 0;
+      return bTime - aTime;
+    })
+  );
+
 export const createTicket = async (ticket) => {
   const now = serverTimestamp();
 
@@ -465,6 +503,15 @@ export const subscribeTicketEditRequests = (callback, onError, filters = {}) => 
     }
   );
 };
+
+export const getTicketEditRequests = () =>
+  fetchCollection("ticket_edit_requests", (rows) =>
+    [...rows].sort((a, b) => {
+      const aTime = a.createdAt?.toMillis?.() || 0;
+      const bTime = b.createdAt?.toMillis?.() || 0;
+      return bTime - aTime;
+    })
+  );
 
 export const requestTicketEdit = async ({ ticketId, ticketTitle, agentId, agentName, reason }) => {
   await addDoc(collection(db, "ticket_edit_requests"), {
