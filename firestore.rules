@@ -128,8 +128,10 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if (signedIn() && request.auth.uid == uid) || canReview();
       allow create: if canCreateOwnAgentProfile(uid);
-      allow update: if activeUser()
+      allow update: if signedIn()
         && request.auth.uid == uid
+        && resource.data.disabled != true
+        && resource.data.role != 'disabled'
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['mustChangePassword', 'passwordChangedAt', 'updatedAt']);
       allow write: if isTeamLead();

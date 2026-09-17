@@ -80,6 +80,8 @@ export default function CreateUser() {
         name,
         email,
         role,
+        disabled: false,
+        previousRole: "",
         mustChangePassword: true,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
