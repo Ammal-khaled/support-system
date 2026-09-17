@@ -746,7 +746,7 @@ export default function TicketsPage() {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <div className="scroll-panel grid grid-cols-1 gap-3 lg:grid-cols-2">
                   {visibleTickets.map((ticket) => {
                     const isSelected = selectedTicket?.id === ticket.id;
                     const isHighlighted = highlightedTicketId === ticket.id || mergeTicketId === ticket.id;

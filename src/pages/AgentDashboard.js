@@ -176,7 +176,7 @@ export default function AgentDashboard() {
               </p>
             </section>
           ) : (
-            <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <section className="scroll-panel grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {filteredPolicies.map((policy) => (
                 <Link
                   key={policy.id}

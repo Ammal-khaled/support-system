@@ -154,7 +154,7 @@ export default function FlagsFeed({ typeFilter = "all", externalSearchQuery = ""
       ) : visibleFlags.length === 0 ? (
         <p className="text-semantic-neutral">No {typeFilter === "critical" ? "critical" : "soft-skill"} flags match this view.</p>
       ) : (
-        <div className="space-y-3">
+        <div className="scroll-panel space-y-3">
           {visibleFlags.map((flag) => {
             const isCritical = flag.type === "critical";
 

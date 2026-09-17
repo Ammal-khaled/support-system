@@ -341,7 +341,7 @@ export default function CreateUser() {
             ) : visibleUsers.length === 0 ? (
               <p className="text-semantic-neutral">No {userView} users match this filter.</p>
             ) : (
-              <div className="space-y-3">
+              <div className="scroll-panel space-y-3">
                 {visibleUsers.map((user) => {
                   const displayEmail = getUserEmail(user);
 

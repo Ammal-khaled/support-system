@@ -339,7 +339,7 @@ export default function AgentActionsFeed({
           this search.
         </p>
       ) : (
-        <div className="space-y-3">
+        <div className="scroll-panel space-y-3">
           {visibleActions.map(
             (action) => {
               const status = String(

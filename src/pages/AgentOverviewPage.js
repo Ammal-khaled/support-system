@@ -1266,7 +1266,7 @@ export default function AgentOverviewPage() {
                 No support requests in this period.
               </p>
             ) : (
-              <div className="space-y-3">
+              <div className="scroll-panel space-y-3">
                 {displayActions.slice(0, 12).map((action) => (
                   <article key={action.id} className="rounded-2xl border border-surface-border bg-surface-card p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1313,7 +1313,7 @@ export default function AgentOverviewPage() {
                 {criticalFlags.length} critical
               </span>
             </div>
-            <div className="space-y-3">
+            <div className="scroll-panel space-y-3">
               {recentVisibleFlags.map((flag) => (
                 <article key={flag.id} className="rounded-2xl border border-surface-border bg-surface-card p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1384,7 +1384,7 @@ export default function AgentOverviewPage() {
             rows={agentBreakdown.map((agent) => ({ label: agent.name, value: agent.score }))}
             emptyText="No agent performance records in this period."
           />
-          <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+          <section className="scroll-panel grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
             {agentBreakdown.map((agent) => (
             <Link
               key={agent.id}
@@ -1417,7 +1417,7 @@ export default function AgentOverviewPage() {
           <StatusMix title="Ticket Status Mix" rows={ticketStatusTrends} />
           <section className="glass-card p-5 sm:p-6">
             <h2 className="text-xl font-extrabold text-slate-950">Recent Tickets</h2>
-            <div className="mt-5 space-y-3">
+            <div className="scroll-panel mt-5 space-y-3">
               {displayTickets.slice(0, 8).map((ticket) => (
                 <Link
                   key={ticket.id}

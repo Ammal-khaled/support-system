@@ -321,7 +321,7 @@ export default function KnowledgeBaseForm() {
         ) : visiblePolicies.length === 0 ? (
           <p className="text-semantic-neutral">No policies match this search.</p>
         ) : (
-          <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <ul className="scroll-panel grid grid-cols-1 gap-3 lg:grid-cols-2">
             {visiblePolicies.map((policy) => (
               <li key={policy.id}>
                 <button

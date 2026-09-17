@@ -192,7 +192,7 @@ export default function BannedPhrasesManager() {
         ) : visiblePhrases.length === 0 ? (
           <p className="text-semantic-neutral">No flag rules configured yet.</p>
         ) : (
-          <ul className="space-y-2">
+          <ul className="scroll-panel space-y-2">
             {visiblePhrases.map((phrase) => (
               <li
                 key={phrase.id}

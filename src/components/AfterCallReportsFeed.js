@@ -134,7 +134,7 @@ export default function AfterCallReportsFeed({ externalSearchQuery = "", showSea
       ) : error ? (
         <p className="text-semantic-error text-sm font-semibold">{error}</p>
       ) : (
-        <div className="space-y-4">
+        <div className="scroll-panel space-y-4">
           {showSample && (
             <div className="rounded-xl border border-brand-primary/30 bg-brand-primary/10 px-4 py-3 text-sm font-semibold text-brand-primary">
               Sample preview only. Real after-call reports will appear here after the extension sends a finished call transcript to AI.

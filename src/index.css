@@ -243,4 +243,27 @@
   .connector-line {
     @apply border-t border-surface-border;
   }
+
+  .scroll-panel {
+    @apply max-h-[62vh] overflow-y-auto pr-2;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--surface-border)) transparent;
+  }
+
+  .scroll-panel::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .scroll-panel::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scroll-panel::-webkit-scrollbar-thumb {
+    background: rgb(var(--surface-border));
+    border-radius: 999px;
+  }
+
+  .scroll-panel::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--semantic-neutral) / 0.7);
+  }
 }
