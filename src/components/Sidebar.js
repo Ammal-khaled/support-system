@@ -1,4 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { logoutUser } from "../services/auth";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -9,6 +10,9 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const { currentUser, role, userProfile } = useAuth();
   const { isDark, toggleTheme } = useTheme();
+  const [notificationPermission, setNotificationPermission] = useState(
+    typeof Notification !== "undefined" ? Notification.permission : "default"
+  );
   const canReceiveDesktopAlerts = ["team_lead", "quality_supervisor", "quality_control"].includes(role);
   const roleLabel = role === "quality_supervisor" || role === "quality_control"
     ? "Quality Control"
@@ -16,8 +20,20 @@ export default function Sidebar() {
 
   const enableDesktopAlerts = async () => {
     if (typeof Notification === "undefined") return;
-    await Notification.requestPermission();
+    const result = await Notification.requestPermission();
+    setNotificationPermission(result);
   };
+
+  useEffect(() => {
+    if (typeof Notification === "undefined") return;
+    const syncPermission = () => setNotificationPermission(Notification.permission);
+    document.addEventListener("visibilitychange", syncPermission);
+    window.addEventListener("focus", syncPermission);
+    return () => {
+      document.removeEventListener("visibilitychange", syncPermission);
+      window.removeEventListener("focus", syncPermission);
+    };
+  }, []);
 
   const handleLogout = async () => {
     await logoutUser();
@@ -109,7 +125,7 @@ export default function Sidebar() {
             >
               Sign Out
             </button>
-            {canReceiveDesktopAlerts && typeof Notification !== "undefined" && Notification.permission !== "granted" && (
+            {canReceiveDesktopAlerts && typeof Notification !== "undefined" && notificationPermission !== "granted" && (
               <button
                 onClick={enableDesktopAlerts}
                 className="rounded-xl border border-surface-border px-3 py-2 text-sm font-bold text-semantic-neutral transition-colors hover:border-brand-primary hover:text-brand-primary"
@@ -166,11 +182,11 @@ export default function Sidebar() {
           {canReceiveDesktopAlerts && typeof Notification !== "undefined" && (
             <button
               onClick={enableDesktopAlerts}
-              disabled={Notification.permission === "granted" || Notification.permission === "denied"}
+              disabled={notificationPermission === "granted" || notificationPermission === "denied"}
               className="mb-2 flex w-full items-center justify-between rounded-2xl border border-surface-border px-3 py-3 text-sm font-bold text-semantic-neutral transition-colors enabled:hover:border-brand-primary enabled:hover:text-brand-primary disabled:cursor-default disabled:opacity-70"
             >
               <span>Desktop alerts</span>
-              <span>{Notification.permission === "granted" ? "On" : Notification.permission === "denied" ? "Blocked" : "Off"}</span>
+              <span>{notificationPermission === "granted" ? "On" : notificationPermission === "denied" ? "Blocked" : "Off"}</span>
             </button>
           )}
           <button
