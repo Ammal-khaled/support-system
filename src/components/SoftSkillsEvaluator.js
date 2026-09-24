@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { analyzeSoftSkills } from "../services/aiAnalyzer";
-import { getBannedPhrases, getFlags, getPolicies } from "../services/firestore";
-
-const sampleTranscript =
-  "I can't help you with that refund. You have to wait until someone else checks it.";
+import { addAfterCallReport, getBannedPhrases, getFlags, getPolicies } from "../services/firestore";
+import { useAuth } from "../context/AuthContext";
 
 export default function SoftSkillsEvaluator() {
-  const [transcript, setTranscript] = useState(sampleTranscript);
+  const { currentUser, userProfile } = useAuth();
+  const [transcript, setTranscript] = useState("");
   const [recording, setRecording] = useState(null);
+  const [activeFileName, setActiveFileName] = useState("");
+  const [activeFileType, setActiveFileType] = useState("");
+  const fileInputRef = useRef(null);
   const [result, setResult] = useState(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -26,11 +28,15 @@ export default function SoftSkillsEvaluator() {
 
   const handleFileUpload = async (file) => {
     setRecording(null);
+    setActiveFileName("");
+    setActiveFileType("");
     setError("");
     if (!file) return;
 
     if (file.type.startsWith("text/") || /\.(txt|vtt|srt)$/i.test(file.name)) {
       setTranscript(await file.text());
+      setActiveFileName(file.name);
+      setActiveFileType("text");
       setStatus(`Loaded transcript file: ${file.name}`);
       return;
     }
@@ -41,7 +47,29 @@ export default function SoftSkillsEvaluator() {
     }
 
     setRecording(file);
+    setTranscript("");
+    setActiveFileName(file.name);
+    setActiveFileType("audio");
     setStatus(`Recording ready for AI analysis: ${file.name}`);
+  };
+
+  const handleTranscriptChange = (event) => {
+    setTranscript(event.target.value);
+    if (recording || activeFileName) {
+      setRecording(null);
+      setActiveFileName("");
+      setActiveFileType("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setRecording(null);
+    if (activeFileType === "text") setTranscript("");
+    setActiveFileName("");
+    setActiveFileType("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setStatus("");
   };
 
   const handleEvaluate = async (event) => {
@@ -57,6 +85,7 @@ export default function SoftSkillsEvaluator() {
         getPolicies(),
         getFlags(),
       ]);
+      // The sandbox always sends one source: transcript text OR audio, never both.
       const audioPayload = recording
         ? {
             audioBase64: await fileToBase64(recording),
@@ -64,7 +93,7 @@ export default function SoftSkillsEvaluator() {
             audioFileName: recording.name,
           }
         : {};
-      const analysis = await analyzeSoftSkills(transcript, {
+      const analysis = await analyzeSoftSkills(recording ? "" : transcript, {
         ...audioPayload,
         bannedPhrases,
         kbArticles,
@@ -72,7 +101,14 @@ export default function SoftSkillsEvaluator() {
       });
 
       setResult(analysis);
-      setStatus("AI analysis completed. Nothing was saved to the review queue.");
+      await addAfterCallReport({
+        agentId: currentUser?.uid || "sandbox",
+        agentName: userProfile?.name || currentUser?.displayName || currentUser?.email || "Sandbox User",
+        transcriptSnippet: recording ? "Audio recording analyzed by AI." : transcript,
+        audioFileName: recording?.name || "",
+        result: analysis,
+      });
+      setStatus("AI analysis completed and saved to After-Call Reports for QA export.");
     } catch (err) {
       console.error("Soft-skills evaluation failed:", err);
       setError(err.message || "AI coaching is unavailable. Check the Worker URL and deployment.");
@@ -102,21 +138,31 @@ export default function SoftSkillsEvaluator() {
         <div>
           <label className="label-field">Upload Recording or Transcript</label>
           <input
+            ref={fileInputRef}
             type="file"
             accept="audio/*,.mp3,.wav,.m4a,.webm,.ogg,.txt,.vtt,.srt,text/plain"
             onChange={(event) => handleFileUpload(event.target.files?.[0])}
             className="input-field mt-2"
           />
+          {activeFileName && (
+            <div className="mt-2 flex items-center gap-3 text-sm font-semibold text-semantic-neutral">
+              <span className="truncate">Selected: {activeFileName}</span>
+              <button type="button" onClick={handleRemoveFile} className="btn-secondary px-3 py-1 text-xs">
+                Remove
+              </button>
+            </div>
+          )}
           <p className="mt-2 text-xs font-semibold text-semantic-neutral">
             Audio files are sent to AI for transcription and analysis. Text files load into the transcript box below.
           </p>
         </div>
 
         <div>
-          <label className="label-field">Transcript Sample</label>
+          <label className="label-field">Transcript</label>
           <textarea
             value={transcript}
-            onChange={(event) => setTranscript(event.target.value)}
+            onChange={handleTranscriptChange}
+            placeholder="Paste or type a transcript to analyze it."
             rows={7}
             className="input-field resize-y"
             required={!recording}

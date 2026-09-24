@@ -323,6 +323,32 @@ export const getAfterCallReports = () =>
       })
   );
 
+export const addAfterCallReport = async ({
+  agentId,
+  agentName,
+  transcriptSnippet = "",
+  audioFileName = "",
+  result = {},
+  source = "ai_rule_sandbox",
+}) => {
+  await addDoc(collection(db, "after_call_reports"), {
+    agentId,
+    agentName,
+    transcriptSnippet,
+    audioFileName,
+    source,
+    softSkills: JSON.stringify(result.softSkills || {}),
+    bannedPhrases: JSON.stringify(result.bannedPhrases || []),
+    incorrectInformation: JSON.stringify(result.incorrectInformation || []),
+    recommendations: JSON.stringify(result.recommendations || []),
+    feedback: result.feedback || "",
+    summary: result.summary || "",
+    severity: result.severity || "soft_skill",
+    isCompliant: Boolean(result.isCompliant),
+    createdAt: serverTimestamp(),
+  });
+};
+
 export const markFlagReviewed = async (id) => {
   await updateDoc(doc(db, "flags", id), {
     reviewed: true,
