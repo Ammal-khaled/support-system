@@ -28,7 +28,7 @@ export default function CreateUser() {
   const [query, setQuery] = useState("");
 
   const roleLabel = (value) => {
-    if (value === "quality_supervisor") return "Quality Control";
+    if (value === "quality_supervisor" || value === "quality_control") return "Quality Control";
     if (value === "team_lead") return "Team Lead";
     if (value === "disabled") return "Hidden";
     return "Agent";
@@ -195,7 +195,10 @@ export default function CreateUser() {
     const isHidden = user.disabled || user.role === "disabled";
     const viewMatches = userView === "hidden" ? isHidden : !isHidden;
     const effectiveRole = user.role === "disabled" ? user.previousRole || "agent" : user.role;
-    const roleMatches = roleFilter === "all" || effectiveRole === roleFilter;
+    const roleMatches = roleFilter === "all"
+      || effectiveRole === roleFilter
+      || (roleFilter === "quality_control" && effectiveRole === "quality_supervisor")
+      || (roleFilter === "quality_supervisor" && effectiveRole === "quality_control");
     const matchesSearch = !search || [
       user.id,
       user.name,
@@ -270,7 +273,7 @@ export default function CreateUser() {
                   className="input-field"
                 >
                   <option value="agent">Agent</option>
-                  <option value="quality_supervisor">Quality Control</option>
+                  <option value="quality_control">Quality Control</option>
                   <option value="team_lead">Team Lead</option>
                 </select>
               </div>
@@ -306,7 +309,7 @@ export default function CreateUser() {
                 >
                   <option value="all">All roles</option>
                   <option value="agent">Agent</option>
-                  <option value="quality_supervisor">Quality Control</option>
+                  <option value="quality_control">Quality Control</option>
                   <option value="team_lead">Team Lead</option>
                 </select>
               </label>
@@ -436,7 +439,7 @@ export default function CreateUser() {
                 <label className="label-field">System Role</label>
                 <select value={editForm.role} onChange={(event) => setEditForm((current) => ({ ...current, role: event.target.value }))} className="input-field" disabled={editForm.disabled}>
                   <option value="agent">Agent</option>
-                  <option value="quality_supervisor">Quality Control</option>
+                  <option value="quality_control">Quality Control</option>
                   <option value="team_lead">Team Lead</option>
                 </select>
               </div>
